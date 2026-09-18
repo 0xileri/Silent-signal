@@ -14,7 +14,7 @@ export function alertText(inv: Investigation): string {
   const t = inv.trigger
   const spent = inv.balanceBefore !== null && inv.balanceAfter !== null ? inv.balanceBefore - inv.balanceAfter : inv.spentUsd
   return [
-    `⚠ SILENT SIGNAL · ${MISSION.entity}${inv.demo ? ' (demo fixture)' : ''}`,
+    `⚠ HUNCH · ${MISSION.entity}${inv.demo ? ' (demo fixture)' : ''}`,
     '',
     `Claim: ${a.claim}`,
     `Status: ${STATUS_LABEL[a.status]} · confidence ${Math.round(a.confidence * 100)}%`,

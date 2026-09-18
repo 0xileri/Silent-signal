@@ -8,7 +8,7 @@ import { PUBLIC_URL, SCHEDULE, SIGNAL } from '../config.js'
 import type { Source, SourceItem } from '../core/types.js'
 import { DEMO_SOURCES } from '../demo/fixture.js'
 
-const USER_AGENT = 'SilentSignal/0.1 (budget-aware narrative watcher; reads public feeds)'
+const USER_AGENT = 'Hunch/0.1 (budget-aware narrative watcher; reads public feeds)'
 const MAX_TEXT = 1500
 
 export const REAL_SOURCES: Source[] = [

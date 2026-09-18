@@ -44,7 +44,7 @@ class AgentOAuthProvider implements OAuthClientProvider {
 
   get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: 'Silent Signal agent',
+      client_name: 'Hunch agent',
       redirect_uris: [REDIRECT_URL],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -109,7 +109,7 @@ function seedLogin(): void {
 export async function connectOrbio({ interactive = false } = {}): Promise<Client> {
   seedLogin()
   const provider = new AgentOAuthProvider()
-  const client = new Client({ name: 'silent-signal-agent', version: '0.1.0' })
+  const client = new Client({ name: 'hunch-agent', version: '0.1.0' })
   const transport = new StreamableHTTPClientTransport(ORBIO_MCP_URL, { authProvider: provider })
   try {
     await client.connect(transport)

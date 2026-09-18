@@ -1,4 +1,4 @@
-// Silent Signal dashboard: polls /api/state and renders it. No framework; every value shown comes
+// Hunch dashboard: polls /api/state and renders it. No framework; every value shown comes
 // from the agent's state.
 ;(() => {
   const $ = (id) => document.getElementById(id)
@@ -42,7 +42,7 @@
   }
 
   function token() {
-    try { return localStorage.getItem('ss-operator') || '' } catch { return '' }
+    try { return localStorage.getItem('hunch-operator') || '' } catch { return '' }
   }
 
   async function post(path, retry = true) {
@@ -53,7 +53,7 @@
     if (res.status === 401 && retry) {
       const t = prompt('This control needs the operator token:')
       if (t) {
-        try { localStorage.setItem('ss-operator', t) } catch {}
+        try { localStorage.setItem('hunch-operator', t) } catch {}
         return post(path, false)
       }
     }

@@ -24,7 +24,7 @@ export async function gatherEvidence(posts: SourceItem[]): Promise<EvidenceDoc[]
 async function fetchDoc(ref: string, target: { name: string; url: string; kind: EvidenceDoc['kind'] }): Promise<EvidenceDoc> {
   try {
     const res = await fetch(target.url, {
-      headers: { 'user-agent': 'SilentSignal/0.1 (evidence check)', accept: 'text/html, text/plain;q=0.9, */*;q=0.5' },
+      headers: { 'user-agent': 'Hunch/0.1 (evidence check)', accept: 'text/html, text/plain;q=0.9, */*;q=0.5' },
       signal: AbortSignal.timeout(10_000),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)

@@ -1,10 +1,10 @@
-# Silent Signal
+# Hunch
 
-**An agent with a finite inference budget that decides when information is worth paying for.**
+**Free hunches. Paid proof.**
 
-**Live:** [silent-signal-production-ad77.up.railway.app](https://silent-signal-production-ad77.up.railway.app). Press **Run demo fixture** and watch it decide.
+**Live:** [hunch-agent.up.railway.app](https://hunch-agent.up.railway.app). Press **Run demo fixture** and watch it decide.
 
-Silent Signal watches public sources and detects emerging narratives using local embeddings, for free. It spends its own [Orbio](https://orbio.so) inference budget only when a signal crosses a risk threshold and the budget allows it. When it spends, a coordinator funds a bounded investigation: two workers and a verifier produce an evidence-backed artifact, and every call is recorded with its real cost and the real balance.
+Hunch is an agent with a finite inference budget that decides when information is worth paying for. It watches public sources and scores emerging narratives with local embeddings, for free: that score is its hunch. It spends its own [Orbio](https://orbio.so) inference budget on proof only when a hunch crosses a risk threshold and the budget allows it. When it spends, a coordinator funds a bounded investigation: two workers and a verifier produce an evidence-backed artifact, and every call is recorded with its real cost and the real balance.
 
 Built for Orbio Build Week. It is an **autonomous budgeted swarm**. It is not self-refueling: nothing here turns completed work into new inference balance (see [Not built](#not-built)).
 

@@ -21,7 +21,7 @@ export type Phase =
   | 'STARTING' | 'IDLE' | 'SCANNING' | 'EVALUATING' | 'WATCHING' | 'FUNDING' | 'INVESTIGATING' | 'VERIFYING' | 'ACCEPTED' | 'REJECTED' | 'ALERTED'
 export type KeyState = 'none' | 'active' | 'revoked' | 'retired'
 
-const KEY_LABEL = 'silent-signal-agent'
+const KEY_LABEL = 'hunch-agent'
 
 const runtime = {
   phase: 'STARTING' as Phase,

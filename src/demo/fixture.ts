@@ -125,7 +125,7 @@ export function demoFeedXml(sourceId: string, publicUrl: string): string | null 
 <rss version="2.0"><channel>
 <title>${esc(source.name)}</title>
 <link>${publicUrl}/demo</link>
-<description>Silent Signal demo fixture: planted posts about a fictional project. Not organic.</description>
+<description>Hunch demo fixture: planted posts about a fictional project. Not organic.</description>
 ${items}
 </channel></rss>`
 }

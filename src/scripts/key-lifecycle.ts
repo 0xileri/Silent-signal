@@ -22,7 +22,7 @@ async function ping(key: HeldKey) {
 const start = await getBalance()
 step('orbio_get_balance', `${usd(start.balanceUsd)} spendable, ${usd(start.spentUsd)} spent so far`)
 
-const first = await createKey('silent-signal-lifecycle')
+const first = await createKey('hunch-lifecycle')
 step('orbio_create_key', `${first.key.prefix}… (replaced an existing key: ${first.replaced})`)
 const status = await getKeyStatus()
 step('orbio_get_key_status', `hasKey ${status.hasKey}, prefix ${status.prefix}…, created ${status.createdAt}`)
@@ -39,7 +39,7 @@ for (let i = 0; i < 5 && after.balanceUsd === start.balanceUsd; i++) {
 }
 step('orbio_get_balance', `${usd(after.balanceUsd)} (Δ ${usd(start.balanceUsd - after.balanceUsd)}), spent ${usd(after.spentUsd)}`)
 
-const second = await createKey('silent-signal-lifecycle')
+const second = await createKey('hunch-lifecycle')
 step('orbio_create_key (rotate)', `${first.key.prefix}… → ${second.key.prefix}… (replaced: ${second.replaced})`)
 const [oldKey, newKey] = await Promise.all([keyAnswers(first.key), keyAnswers(second.key)])
 step('old key, GET /key', `HTTP ${oldKey.status} ${oldKey.ok ? 'STILL ANSWERS (unexpected)' : '(dead)'}`)

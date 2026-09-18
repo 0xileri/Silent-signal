@@ -21,7 +21,7 @@ h1{font-size:1.6rem;margin:12px 0}
 .meta{color:#6b6b66;font-size:.88rem}
 @media (prefers-color-scheme: dark){body{background:#151513;color:#ecece6}.update{background:#1e1e1b;border-color:#33332e}.row{border-color:#33332e}footer{background:#33280c;color:#f2c14e}}
 </style></head>
-<body><footer>Demo fixture for <a href="/">Silent Signal</a>: "Project X" is fictional and these pages are planted test data.</footer>
+<body><footer>Demo fixture for <a href="/">Hunch</a>: "Project X" is fictional and these pages are planted test data.</footer>
 <main>${body}</main></body></html>`
 }
 
@@ -73,7 +73,7 @@ export function demoIndexPage(): string {
     return `<div class="row"><span>Wave ${p.wave} · ${esc(source.name)} · ${esc(p.author)}</span><a href="/demo/posts/${p.id}">${esc(p.title || p.body.replace(/<[^>]+>/g, '').slice(0, 60))}</a></div>`
   }).join('')
   return page(
-    'Silent Signal demo fixture',
+    'Hunch demo fixture',
     `<h1>The demo fixture</h1>
 <p>Nine planted posts about a fictional project, released in three waves across four feeds, plus the project's own <a href="/demo/projectx/status">status page</a> and <a href="/demo/projectx/announcements">announcements</a>. The agent reads the feeds over HTTP like any real source.</p>
 <p class="meta">Current run: ${run ? `${run.runId}, started ${utc(new Date(run.startedAt))}, waves released: ${run.released.map((r) => r.wave).join(', ') || 'none'}` : 'none yet'}</p>

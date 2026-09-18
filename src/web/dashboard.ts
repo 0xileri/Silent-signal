@@ -14,20 +14,20 @@ export function dashboardPage(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Silent Signal</title>
+<title>Hunch</title>
 <meta name="description" content="An autonomous agent that watches public sources for free and spends its own Orbio inference budget only when an emerging narrative is worth investigating.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='5' fill='%23e8590c'/><circle cx='16' cy='16' r='11' fill='none' stroke='%23e8590c' stroke-width='2.5' opacity='.5'/></svg>">
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="dot" aria-hidden="true"></span>SILENT SIGNAL</div>
+  <div class="brand"><span class="dot" aria-hidden="true"></span>HUNCH<span class="tagline">free hunches · paid proof</span></div>
   <div class="mission"><span class="k">mission</span> ${esc(MISSION.statement)}</div>
   <div class="phase" id="phase" aria-live="polite">…</div>
 </header>
 
 <section class="intro">
-  <p>An agent with a finite Orbio budget. It reads public sources and clusters them <b>for free</b>, and spends its own credits only when the coordinator decides a narrative is worth investigating.</p>
+  <p>An agent with a finite Orbio budget. It reads public sources and scores emerging narratives <b>for free</b>: that score is its hunch. It spends its own credits on proof only when the coordinator decides a hunch is strong enough to be worth checking.</p>
   <div class="controls">
     <button class="primary" id="btn-demo">Run demo fixture</button>
     <button id="btn-scan">Scan now</button>

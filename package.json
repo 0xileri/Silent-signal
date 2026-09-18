@@ -1,5 +1,5 @@
 {
-  "name": "silent-signal",
+  "name": "hunch",
   "version": "0.1.0",
   "private": true,
   "description": "An autonomous agent on its own Orbio key that watches public sources for free and pays for inference only when an emerging narrative is worth investigating.",

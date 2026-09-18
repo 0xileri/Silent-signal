@@ -8,7 +8,7 @@ const redact = (value: unknown) =>
   JSON.stringify(value, null, 2).replace(/sk-(orbio|or)-[\w-]{6,}/g, (key) => `${key.slice(0, 14)}…`)
 
 const client = await connectOrbio({ interactive: true })
-console.log('The Silent Signal agent is signed in to Orbio.')
+console.log('The Hunch agent is signed in to Orbio.')
 
 const { tools } = await client.listTools()
 console.log(`\nTools: ${tools.map((t) => t.name).join(', ')}`)

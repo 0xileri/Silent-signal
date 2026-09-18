@@ -1,4 +1,4 @@
-// Silent Signal: the dashboard, its API, the demo fixture's pages, and the agent's schedule, in one
+// Hunch: the dashboard, its API, the demo fixture's pages, and the agent's schedule, in one
 // process.
 import './env.js'
 import { serve } from '@hono/node-server'
@@ -31,7 +31,7 @@ app.get('/api/signals/:id', (c) => {
 app.get('/api/investigations/:id', (c) => {
   const inv = state.investigations.find((i) => i.id === c.req.param('id'))
   if (!inv) return c.json({ error: 'not found' }, 404)
-  if (c.req.query('download')) c.header('content-disposition', `attachment; filename="silent-signal-${inv.id}.json"`)
+  if (c.req.query('download')) c.header('content-disposition', `attachment; filename="hunch-${inv.id}.json"`)
   return c.json({ ...inv, spend: state.spend.filter((s) => s.investigationId === inv.id) })
 })
 app.get('/api/spend', (c) => c.json(state.spend))
@@ -112,7 +112,7 @@ app.get('/demo/projectx/status', (c) => c.html(statusPage()))
 app.get('/demo/projectx/announcements', (c) => c.html(announcementsPage()))
 
 serve({ fetch: app.fetch, port: PORT }, () => {
-  console.log(`Silent Signal on ${PUBLIC_URL}`)
+  console.log(`Hunch on ${PUBLIC_URL}`)
   startAgent().then(() => {
     if (!SCHEDULE.enabled) return
     setTimeout(() => scan('first scan').catch(() => {}), 5_000)
