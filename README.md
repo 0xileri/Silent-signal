@@ -32,10 +32,10 @@ The agent signs in to the Orbio MCP (`https://www.orbio.so/api/mcp`) as its own 
 | When | What it does | Orbio |
 |---|---|---|
 | Start | Reads the balance, mints its key, reads the key status | `orbio_get_balance`, `orbio_create_key`, `orbio_get_key_status` |
-| Every scan and every paid call | Reads the real balance | `orbio_get_balance` |
+| Every scan and every paid call | Reads the real balance, and checks the account's key is still its own; if something else minted or revoked it, the agent claims a fresh one | `orbio_get_balance`, `orbio_get_key_status` |
 | After every investigation | Rotates: mints a fresh key (Orbio retires the old one in the same call), then proves the old key is dead with a free `GET /api/v1/key` | `orbio_create_key` |
 | Operator presses Revoke, or one call costs over $0.05 | Revokes. The agent then refuses paid work, even across restarts, until the operator claims a key again | `orbio_revoke_key` |
-| Shutdown | Revokes, so no key is left behind | `orbio_revoke_key` |
+| Shutdown and restart | Tries to revoke on shutdown. If the host kills the process first (Railway does on redeploy), the next start's mint retires the old key in the same call, so no stale key outlives a restart | `orbio_revoke_key`, `orbio_create_key` |
 
 The secret only ever lives in the agent's memory. It is never written to disk, logged or sent to the browser.
 
