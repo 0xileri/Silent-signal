@@ -11,7 +11,7 @@
 
 Hunch is an agent with a finite inference budget that decides when information is worth paying for. It watches public sources and scores emerging narratives with local embeddings, for free: that score is its hunch. It spends its own [Orbio](https://orbio.so) inference budget on proof only when a hunch crosses a risk threshold and the budget allows it. When it spends, a coordinator funds a bounded investigation: two workers and a verifier produce an evidence-backed artifact, and every call is recorded with its real cost and the real balance.
 
-Built for Orbio Build Week. It is an **autonomous budgeted swarm**. It is not self-refueling: nothing here turns completed work into new inference balance (see [Not built](#not-built)).
+Built for Orbio Build Week. It is an **autonomous budgeted swarm**. Self-refuel from an operator-funded treasury on Robinhood Chain, through Orbio's `buyAndActivate`, is built and waiting for its first funded run (see [Self-refuel](#self-refuel-from-a-treasury)). It doesn't earn its fuel: nothing here turns completed work into money.
 
 > "The important part is not that AI read Reddit. It's that the agent decided when the information was worth spending money on."
 
@@ -27,6 +27,7 @@ mission + budget
   → WORKERS      source-tracer → evidence fetch (HTTP, $0) → cross-checker ............... paid, on its key
   → VERIFIER     one calibrated finding, then code-level acceptance checks ................. paid, on its key
   → ACCOUNTING   balance before/after from orbio_get_balance; spend ledger; alert; fresh key
+  → FUEL         runway short? buy CREDIT on Robinhood Chain from the treasury and activate it
 ```
 
 The dashboard shows every step live: the state machine, the score and why, each check the coordinator ran, the workers and their bids, the artifact, the spend ledger and the agent's activity log.
@@ -67,6 +68,24 @@ Flash-Lite's cross-check looked fine, but half its quotes don't appear in the do
 - **Third run:** Flash-Lite got its trial as cross-checker, needed a retry, and graded 0.85.
 
 No worker is paid. Bids are cost estimates, and every cent is the agent's own inference spend.
+
+## Self-refuel from a treasury
+
+The agent has its own wallet on Robinhood Chain (chain 4663): the treasury. The operator funds it with USDG and a little ETH for gas. When the agent's runway (the investigations it can still afford before its reserve) drops below 3, it refuels itself through Orbio's published CREDIT protocol ([orbio.so/protocol/agents](https://www.orbio.so/protocol/agents)):
+
+1. `Exchange.getQuote(usdgIn, MAX_FILLS)`: price the CREDIT order book. The agent refuses to buy above $0.95 per CREDIT. The book has been selling at **$0.75**, so $2 of USDG buys 2.67 CREDIT, which is $2.67 of Orbio inference.
+2. `USDG.approve(exchange, exactAmount)`: only what this purchase can spend, never an unlimited allowance.
+3. `Exchange.buyAndActivate(usdgIn, minCreditOut, beneficiary, maxFills)`: buy CREDIT and burn it into AI balance in one transaction, with 1% slippage protection. The beneficiary is the wallet `orbio_get_balance` lists for the account the agent spends from.
+4. Read the CREDIT contract's `Activated` event from the receipt, then wait until `orbio_get_balance` shows the new money. Balance plus spent, minus $ORBIO accrual, only rises when money comes in. Only then does the refuel count toward the budget.
+
+**Limits:**
+- 2 USDG per refuel, at most 6 USDG a day
+- no retry within an hour of a failure
+- nothing while the operator has the agent paused
+
+The dashboard shows the treasury, the policy and every refuel with its transaction. Operators can also press **Refuel now**.
+
+**What this is:** the agent decides when it needs fuel, buys it on-chain and activates it for itself. The treasury's money comes from the operator; the agent doesn't earn it. Per the spec, that makes this self-refuel from an operator-funded treasury, not an agent that pays for itself.
 
 ## The agent owns its key
 
@@ -152,6 +171,7 @@ The watcher reads the fixture's feeds over HTTP like any other source, and the c
 | Real | Not real |
 |---|---|
 | The Orbio balance, key mint/rotate/revoke, every paid call and its cost | The Project X posts, feeds, status page and announcements (a disclosed fixture) |
+| Refuels, once the treasury is funded: real USDG, real on-chain `buyAndActivate`, confirmed in `orbio_get_balance` | The agent "earning" its fuel: the treasury is funded by the operator |
 | Four live public RSS feeds, scanned every 15 minutes and on "Scan now" | "Real-time" monitoring: it scans on a schedule and on demand |
 | Local embeddings, clustering and scores | Worker "bids" are the agent's cost estimates at real prices; no worker is paid |
 | The verifier's acceptance checks (code, not a model) | Self-refueling (not built) |
@@ -176,6 +196,7 @@ Settings are in [.env.example](.env.example): mission, budget, thresholds, model
 - `src/watcher/`: `sources.ts` (feeds, cache, parsing), `embed.ts` (MiniLM), `cluster.ts`, `score.ts`
 - `src/agent/`: `coordinator.ts` (the state machine, key lifecycle, scans, demo), `budget-policy.ts` (the decision and its checks), `market.ts` (worker pools, auctions, grading, reputation), `investigation.ts` (funding, metering, workers, acceptance), `workers.ts` (prompts and JSON schemas), `evidence.ts`, `alert.ts`
 - `src/orbio/`: `mcp.ts` (the agent's OAuth MCP client), `keys.ts` (balance, key status, mint, revoke, free key check), `gateway.ts` (metered calls)
+- `src/chain/`: `refuel.ts` (treasury, quote, approve, `buyAndActivate`, the `Activated` receipt) and Orbio's published ABIs
 - `src/demo/`: the fixture and Project X's pages
 - `src/web/`: the dashboard (`app.js` polls `/api/state`)
 - `brand/`: the logo (the rising dots are the demo's three waves: ignore, watch, investigate), as SVG with PNG exports and the link-preview card
@@ -185,7 +206,7 @@ Deviations from the original plan, on purpose: one TypeScript process (Hono) ser
 
 ## Not built
 
-- **Self-refueling.** The planning spec suggests `Exchange.buyAndActivate` on Robinhood Chain as a way to turn value into new inference balance. It isn't wired: there is no treasury, no USDG, and the contract path was never verified. Orbio credits do accrue from holding $ORBIO (`accrued` in `orbio_get_balance`), but that is not the agent earning anything.
+- **Earning.** The treasury is funded by the operator. A version where paying users or rewards fill the treasury would make the agent truly self-funding.
 - Monitoring anything but text.
 
 ## Limits
