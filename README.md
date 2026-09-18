@@ -11,7 +11,7 @@
 
 Hunch is an agent with a finite inference budget that decides when information is worth paying for. It watches public sources and scores emerging narratives with local embeddings, for free: that score is its hunch. It spends its own [Orbio](https://orbio.so) inference budget on proof only when a hunch crosses a risk threshold and the budget allows it. When it spends, a coordinator funds a bounded investigation: two workers and a verifier produce an evidence-backed artifact, and every call is recorded with its real cost and the real balance.
 
-Built for Orbio Build Week. It is an **autonomous budgeted swarm** that refuels itself from an operator-funded treasury on Robinhood Chain, through Orbio's `buyAndActivate`. Its first live refuel turned 2 USDG into $2.67 of inference, confirmed in `orbio_get_balance` (see [Self-refuel](#self-refuel-from-a-treasury)). It doesn't earn its fuel: nothing here turns completed work into money.
+Built for Orbio Build Week. It is an **autonomous budgeted swarm** that refuels itself from an operator-funded treasury on Robinhood Chain, through Orbio's `buyAndActivate`. Two live refuels, one triggered by its own policy, each turned 2 USDG into $2.67 of inference, confirmed in `orbio_get_balance` (see [Self-refuel](#self-refuel-from-a-treasury)). It doesn't earn its fuel: nothing here turns completed work into money.
 
 > "The important part is not that AI read Reddit. It's that the agent decided when the information was worth spending money on."
 
@@ -95,6 +95,17 @@ The dashboard shows the treasury, the policy and every refuel with its transacti
 | Gas | 0.0000152 ETH for both transactions |
 | `orbio_get_balance` | $49.779849 → **$52.446515** (+$2.666666), seconds after the transaction |
 | Mission budget | $2.00 → $4.67 |
+
+**Then the agent refueled itself.** The live deployment's policy is set to keep at least 200 investigations of runway (the default is 3). On a scheduled scan the agent logged "runway is down to 152 investigations (refuel below 200)" and repeated the whole path with no operator involved:
+
+| Step | Result |
+|---|---|
+| Trigger | the agent's own policy check, after a scan |
+| `buyAndActivate` | 2 USDG → 2.666666 CREDIT at $0.75, activation #217, reusing the earlier allowance: [0x113a…9014](https://robinhoodchain.blockscout.com/tx/0x113ae4ef92f808b69a61af6ffe8e3f593169f43e855822d8d3e36090303a9014) |
+| `orbio_get_balance` | $52.446515 → **$55.113181** (+$2.666666) |
+| Mission budget | $4.67 → $7.33 |
+
+Its first attempt five minutes earlier failed halfway. The USDG approval went through, but Robinhood's public RPC answered the purchase with a Cloudflare bot challenge (HTTP 403), so it never reached the chain. Now transactions are signed locally and broadcast through a fallback of public RPCs for chain 4663. Network failures are retried after five minutes, refusals (price, funds) after an hour. The retry used the approval that had already landed.
 
 The activation raised `balance` directly, while `purchased` and `deposited` stayed at 0. That's why the confirmation uses balance + spent − accrued rather than trusting any one field.
 
