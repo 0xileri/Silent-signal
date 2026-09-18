@@ -11,7 +11,7 @@
 
 Hunch is an agent with a finite inference budget that decides when information is worth paying for. It watches public sources and scores emerging narratives with local embeddings, for free: that score is its hunch. It spends its own [Orbio](https://orbio.so) inference budget on proof only when a hunch crosses a risk threshold and the budget allows it. When it spends, a coordinator funds a bounded investigation: two workers and a verifier produce an evidence-backed artifact, and every call is recorded with its real cost and the real balance.
 
-Built for Orbio Build Week. It is an **autonomous budgeted swarm**. Self-refuel from an operator-funded treasury on Robinhood Chain, through Orbio's `buyAndActivate`, is built and waiting for its first funded run (see [Self-refuel](#self-refuel-from-a-treasury)). It doesn't earn its fuel: nothing here turns completed work into money.
+Built for Orbio Build Week. It is an **autonomous budgeted swarm** that refuels itself from an operator-funded treasury on Robinhood Chain, through Orbio's `buyAndActivate`. Its first live refuel turned 2 USDG into $2.67 of inference, confirmed in `orbio_get_balance` (see [Self-refuel](#self-refuel-from-a-treasury)). It doesn't earn its fuel: nothing here turns completed work into money.
 
 > "The important part is not that AI read Reddit. It's that the agent decided when the information was worth spending money on."
 
@@ -84,6 +84,19 @@ The agent has its own wallet on Robinhood Chain (chain 4663): the treasury. The 
 - nothing while the operator has the agent paused
 
 The dashboard shows the treasury, the policy and every refuel with its transaction. Operators can also press **Refuel now**.
+
+**Measured, first live refuel (2026-09-18):**
+
+| Step | Result |
+|---|---|
+| Quote | 2 USDG → 2.666666 CREDIT at $0.75 (1 fill, 0% fee) |
+| `approve` | exactly 2 USDG: [0xfa71…d156](https://robinhoodchain.blockscout.com/tx/0xfa710693e9ea74f7b087972d2842256054cd03ac615d97c58159d56fa472d156) |
+| `buyAndActivate` | 2 USDG → 2.666666 CREDIT activated, activation #214: [0xea34…7bca](https://robinhoodchain.blockscout.com/tx/0xea34a9cab1e4a5e48adeb7c56f09f044b203a71cc7d30ced16c7b9623cbb7bca) |
+| Gas | 0.0000152 ETH for both transactions |
+| `orbio_get_balance` | $49.779849 → **$52.446515** (+$2.666666), seconds after the transaction |
+| Mission budget | $2.00 → $4.67 |
+
+The activation raised `balance` directly, while `purchased` and `deposited` stayed at 0. That's why the confirmation uses balance + spent − accrued rather than trusting any one field.
 
 **What this is:** the agent decides when it needs fuel, buys it on-chain and activates it for itself. The treasury's money comes from the operator; the agent doesn't earn it. Per the spec, that makes this self-refuel from an operator-funded treasury, not an agent that pays for itself.
 
@@ -171,7 +184,7 @@ The watcher reads the fixture's feeds over HTTP like any other source, and the c
 | Real | Not real |
 |---|---|
 | The Orbio balance, key mint/rotate/revoke, every paid call and its cost | The Project X posts, feeds, status page and announcements (a disclosed fixture) |
-| Refuels, once the treasury is funded: real USDG, real on-chain `buyAndActivate`, confirmed in `orbio_get_balance` | The agent "earning" its fuel: the treasury is funded by the operator |
+| Refuels: real USDG, real on-chain `buyAndActivate`, confirmed in `orbio_get_balance` | The agent "earning" its fuel: the treasury is funded by the operator |
 | Four live public RSS feeds, scanned every 15 minutes and on "Scan now" | "Real-time" monitoring: it scans on a schedule and on demand |
 | Local embeddings, clustering and scores | Worker "bids" are the agent's cost estimates at real prices; no worker is paid |
 | The verifier's acceptance checks (code, not a model) | Self-refueling (not built) |
