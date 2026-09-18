@@ -2,6 +2,8 @@
 
 **An agent with a finite inference budget that decides when information is worth paying for.**
 
+**Live:** [silent-signal-production-ad77.up.railway.app](https://silent-signal-production-ad77.up.railway.app). Press **Run demo fixture** and watch it decide.
+
 Silent Signal watches public sources and detects emerging narratives using local embeddings, for free. It spends its own [Orbio](https://orbio.so) inference budget only when a signal crosses a risk threshold and the budget allows it. When it spends, a coordinator funds a bounded investigation: two workers and a verifier produce an evidence-backed artifact, and every call is recorded with its real cost and the real balance.
 
 Built for Orbio Build Week. It is an **autonomous budgeted swarm**. It is not self-refueling: nothing here turns completed work into new inference balance (see [Not built](#not-built)).
@@ -78,13 +80,14 @@ orbio_revoke_key           revoked: true
 orbio_get_key_status       hasKey false
 ```
 
-**The demo fixture, three runs:**
+**The demo fixture, four runs:**
 
 | | Wave 1 (1 post) | Wave 2 (4 posts, 3 sources) | Wave 3 (9 posts, 4 sources) | Investigation | Verdict |
 |---|---|---|---|---|---|
 | Run 1 | 0.21 IGNORE | 0.57 WATCH | 0.97 INVESTIGATE | $0.0259 | partially supported, 55% |
 | Run 2, key revoked first | 0.21 IGNORE | 0.57 WATCH | 0.97 → **WATCH: "the agent holds no key"**, $0 | after the key was re-claimed, the next scan funded it: $0.0235 | supported, 85%* |
 | Run 3 | 0.21 IGNORE | 0.57 WATCH | 0.97 INVESTIGATE | $0.0249 | partially supported, 85% |
+| Run 4, deployed on Railway | 0.21 IGNORE | 0.57 WATCH | 0.97 INVESTIGATE | $0.0251 | partially supported, 85% |
 
 In every run, the balance change across the investigation equalled the metered cost to the micro-dollar. A typical investigation: source-tracer (Claude Haiku 4.5) ~$0.0033, cross-checker (Haiku 4.5) ~$0.006, verifier (Claude Sonnet 5) ~$0.016. The planned worst case was ~$0.035 against a $0.30 allocation. After every investigation the agent rotated its key; the old key answered HTTP 401 and the balance didn't move.
 
