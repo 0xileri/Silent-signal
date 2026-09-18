@@ -25,9 +25,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 button.small { padding: 5px 11px; font-size: .85rem; border-radius: 8px; }
 
 .top { display: flex; align-items: center; gap: 18px; padding: 16px 24px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
-.brand { font-weight: 800; letter-spacing: .14em; font-size: .95rem; display: flex; align-items: center; gap: 10px; }
-.brand .tagline { font-family: var(--mono); font-weight: 600; font-size: .7rem; letter-spacing: .06em; color: var(--muted); text-transform: none; margin-left: 4px; }
-.brand .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.brand { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; }
+.brand .logo { height: 32px; width: auto; display: block; }
+.logo .d1 { fill: #cfcabd; } .logo .d2 { fill: #9a968b; } .logo .d3 { fill: var(--accent); }
+@media (prefers-color-scheme: dark) { .logo .d1 { fill: #4a4842; } .logo .d2 { fill: #7d7a70; } }
+.brand .tagline { font-family: var(--mono); font-weight: 600; font-size: .7rem; letter-spacing: .06em; color: var(--muted); text-transform: none; margin-left: 0; }
 .mission { color: var(--muted); flex: 1; min-width: 220px; }
 .mission .k, .k { font-family: var(--mono); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 6px; }
 .phase { font-family: var(--mono); font-weight: 700; font-size: .8rem; letter-spacing: .08em; padding: 6px 12px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); }

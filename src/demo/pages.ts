@@ -9,6 +9,7 @@ function page(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
+<link rel="icon" href="/brand/icon.svg" type="image/svg+xml">
 <style>
 body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;background:#f7f7f5;color:#1c1c1a}
 main{max-width:720px;margin:0 auto;padding:24px 16px 64px}

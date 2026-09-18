@@ -1,6 +1,7 @@
 // Hunch: the dashboard, its API, the demo fixture's pages, and the agent's schedule, in one
 // process.
 import './env.js'
+import { existsSync, readFileSync } from 'node:fs'
 import { serve } from '@hono/node-server'
 import { Hono, type Context } from 'hono'
 import {
@@ -20,6 +21,16 @@ const denied = (c: Context) => c.json({ error: 'This control needs the operator 
 const failure = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 app.get('/', (c) => c.html(dashboardPage()))
+// The logo and its exports (brand/): SVG for the page, PNG for favicons and link previews.
+const BRAND_TYPES: Record<string, string> = { svg: 'image/svg+xml', png: 'image/png' }
+app.get('/brand/:file', (c) => {
+  const file = c.req.param('file')
+  const type = BRAND_TYPES[file.split('.').pop() ?? '']
+  const path = new URL(`../brand/${file}`, import.meta.url)
+  if (!type || !/^[\w-]+\.(svg|png)$/.test(file) || !existsSync(path)) return c.notFound()
+  return c.body(readFileSync(path), 200, { 'content-type': type, 'cache-control': 'public, max-age=86400' })
+})
+app.get('/favicon.ico', (c) => c.redirect('/brand/icon-32.png', 301))
 app.get('/app.js', (c) => c.body(APP_JS, 200, { 'content-type': 'text/javascript; charset=utf-8' }))
 app.get('/app.css', (c) => c.body(APP_CSS, 200, { 'content-type': 'text/css; charset=utf-8' }))
 app.get('/api/state', (c) => c.json(snapshot()))

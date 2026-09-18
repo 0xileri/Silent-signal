@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 214 56" role="img" aria-label="Hunch">
+<circle cx="14" cy="46" r="4.5" fill="#cfcabd"/><circle cx="27" cy="36" r="6.5" fill="#9a968b"/><circle cx="45" cy="22" r="10.5" fill="#d9480f"/>
+<path transform="translate(70 11)" d="M4 4V40M4 26A9 9 0 0 1 22 26V40M33 16V30A9 9 0 0 0 51 30M51 16V40M62 16V40M62 26A9 9 0 0 1 80 26V40M111.5 19.5A12 12 0 1 0 111.5 36.5M122.5 4V40M122.5 26A9 9 0 0 1 140.5 26V40" fill="none" stroke="#1a1915" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

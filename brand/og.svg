@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#16171a"/>
+<g transform="translate(84 70) scale(3)">
+<circle cx="14" cy="46" r="4.5" fill="#4a4842"/><circle cx="27" cy="36" r="6.5" fill="#7d7a70"/><circle cx="45" cy="22" r="10.5" fill="#ff7a3d"/>
+<path transform="translate(70 11)" d="M4 4V40M4 26A9 9 0 0 1 22 26V40M33 16V30A9 9 0 0 0 51 30M51 16V40M62 16V40M62 26A9 9 0 0 1 80 26V40M111.5 19.5A12 12 0 1 0 111.5 36.5M122.5 4V40M122.5 26A9 9 0 0 1 140.5 26V40" fill="none" stroke="#ecebe5" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<text x="100" y="360" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="68" font-weight="700" fill="#ecebe5">Free hunches. Paid proof.</text>
+<text x="100" y="424" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="30" fill="#9b998f">An agent on its own Orbio key. It watches public sources for free</text>
+<text x="100" y="466" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="30" fill="#9b998f">and pays for inference only when a story is worth checking.</text>
+<g font-family="Cascadia Mono, Consolas, monospace" font-size="26" font-weight="700">
+<rect x="100" y="522" width="200" height="50" rx="10" fill="#1d1f23" stroke="#2a2c31"/><text x="200" y="556" text-anchor="middle" fill="#75736b">0.21 IGNORE</text>
+<text x="322" y="556" text-anchor="middle" fill="#75736b">→</text>
+<rect x="344" y="522" width="196" height="50" rx="10" fill="#35280b" stroke="#f0b545"/><text x="442" y="556" text-anchor="middle" fill="#f0b545">0.57 WATCH</text>
+<text x="562" y="556" text-anchor="middle" fill="#75736b">→</text>
+<rect x="584" y="522" width="286" height="50" rx="10" fill="#3a1d10" stroke="#ff7a3d"/><text x="727" y="556" text-anchor="middle" fill="#ff7a3d">0.97 INVESTIGATE</text>
+</g>
+<text x="1116" y="84" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="22" fill="#75736b">hunch-agent.up.railway.app</text>
+</svg>

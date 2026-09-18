@@ -1,4 +1,9 @@
-# Hunch
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo-dark.svg">
+    <img alt="Hunch" src="brand/logo-light.svg" width="260">
+  </picture>
+</h1>
 
 **Free hunches. Paid proof.**
 
@@ -134,6 +139,7 @@ Settings are in [.env.example](.env.example): mission, budget, thresholds, model
 - `src/orbio/`: `mcp.ts` (the agent's OAuth MCP client), `keys.ts` (balance, key status, mint, revoke, free key check), `gateway.ts` (metered calls)
 - `src/demo/`: the fixture and Project X's pages
 - `src/web/`: the dashboard (`app.js` polls `/api/state`)
+- `brand/`: the logo (the rising dots are the demo's three waves: ignore, watch, investigate), as SVG with PNG exports and the link-preview card
 - API: `GET /api/state`, `/api/signals`, `/api/investigations/:id`, `/api/spend`; `POST /api/scan`, `/api/demo/run`, `/api/key/{rotate,revoke,claim}`, `/api/agent/{pause,resume}`
 
 Deviations from the original plan, on purpose: one TypeScript process (Hono) serves the dashboard and runs the agent, with no React/Vite build. State is a JSON file instead of SQLite. The clustering threshold is 0.6, not 0.82: the fixture's paraphrases measure 0.49–0.87 apart, and the "exploit" posts split off at 0.82.
