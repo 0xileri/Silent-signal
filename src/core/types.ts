@@ -236,4 +236,6 @@ export interface Refuel {
   balanceBefore: number | null
   balanceAfter: number | null
   error: string | null
+  /** A network or RPC failure, retried after minutes rather than an hour. */
+  transient?: boolean
 }

@@ -10,7 +10,7 @@ import { MISSION, MODELS, POLICY, REFUEL, SCHEDULE, SIGNAL } from '../config.js'
 import { log, recentLog } from '../core/log.js'
 import { lastBalance, missionBudgetUsd, missionSpentUsd, refueledUsd, save, state, type BalanceReading } from '../core/state.js'
 import type { Decision, Refuel, SignalCluster } from '../core/types.js'
-import { addressUrl, buyAndActivate, readTreasury, treasuryAccount, txUrl, type Treasury } from '../chain/refuel.js'
+import { addressUrl, buyAndActivate, readTreasury, RefuelError, treasuryAccount, txUrl, type Treasury } from '../chain/refuel.js'
 import { DEMO_POSTS, DEMO_SOURCES, fixtureRun, releaseWave, startFixtureRun } from '../demo/fixture.js'
 import { createKey, getBalance, getKeyStatus, keyAnswers, revokeKey as orbioRevoke, topUps, type HeldKey } from '../orbio/keys.js'
 import { budgetLimits, decide } from './budget-policy.js'
@@ -373,10 +373,14 @@ async function fuelCheck(): Promise<void> {
   const spentToday = state.agent.refuels
     .filter((r) => Date.parse(r.at) > Date.now() - DAY && r.status !== 'failed')
     .reduce((sum, r) => sum + r.usdgIn, 0)
-  const recentFailure = state.agent.refuels.some((r) => r.status === 'failed' && Date.parse(r.at) > Date.now() - 3_600_000)
+  // A refusal (price, funds) waits an hour; a network or RPC failure is retried after five minutes.
+  const transient = (r: Refuel) => r.transient ?? /HTTP request failed|fetch failed|timed? ?out|ECONN|Status: (403|429|5\d\d)/i.test(r.error ?? '')
+  const recentFailure = state.agent.refuels.some(
+    (r) => r.status === 'failed' && Date.parse(r.at) > Date.now() - (transient(r) ? 5 : 60) * 60_000,
+  )
   const blocked =
     spentToday + REFUEL.usdg > REFUEL.maxUsdgPerDay ? `the ${REFUEL.maxUsdgPerDay} USDG daily cap is reached`
-    : recentFailure ? 'the last refuel failed less than an hour ago'
+    : recentFailure ? 'the last refuel failed recently (network errors wait 5 minutes, refusals an hour)'
     : !runtime.treasury ? 'the treasury could not be read'
     : runtime.treasury.usdg < REFUEL.usdg ? `the treasury holds ${runtime.treasury.usdg} USDG, needs ${REFUEL.usdg}`
     : runtime.treasury.eth <= 0 ? 'the treasury has no ETH for gas'
@@ -433,8 +437,10 @@ export async function refuel(trigger: Refuel['trigger'], reason: string): Promis
     runtime.treasury = await readTreasury().catch(() => runtime.treasury)
   } catch (err) {
     r.status = 'failed'
-    r.error = err instanceof Error ? err.message : String(err)
-    log('ERROR', `refuel failed: ${r.error}`)
+    r.transient = !(err instanceof RefuelError)
+    const short = (err as { shortMessage?: string }).shortMessage ?? (err instanceof Error ? err.message : String(err))
+    r.error = short.split('\n')[0]!.slice(0, 200)
+    log('ERROR', `refuel failed${r.transient ? ' (network; retrying in 5 minutes)' : ''}: ${r.error}`)
   } finally {
     runtime.refueling = false
     save()

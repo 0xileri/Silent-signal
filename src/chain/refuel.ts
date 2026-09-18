@@ -6,15 +6,26 @@
 // Contracts and ABIs are Orbio's own (orbio.so/protocol/agents): nothing here is guessed.
 import { readFileSync } from 'node:fs'
 import {
-  createPublicClient, createWalletClient, decodeEventLog, defineChain, formatEther, formatUnits, http, pad, parseAbi, type Abi, type Hex,
+  createPublicClient, createWalletClient, decodeEventLog, defineChain, encodeFunctionData, fallback, formatEther, formatUnits, http, keccak256,
+  pad, parseAbi, type Abi, type Hex,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
+
+/**
+ * Robinhood's public RPC sits behind Cloudflare and sometimes answers with a bot challenge, so the
+ * agent falls back to other public endpoints listed for chain 4663 (checked in sync on 2026-09-19).
+ */
+const RPC_URLS = (process.env.ROBINHOOD_RPC_URLS ?? 'https://rpc.mainnet.chain.robinhood.com,https://robinhood-rpc.publicnode.com,https://rpc.ordofi.network')
+  .split(',')
+  .map((u) => u.trim())
+  .filter(Boolean)
+const transport = () => fallback(RPC_URLS.map((url) => http(url, { retryCount: 2, retryDelay: 800, timeout: 20_000 })))
 
 export const ROBINHOOD = defineChain({
   id: 4663,
   name: 'Robinhood Chain',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: [process.env.ROBINHOOD_RPC_URL ?? 'https://rpc.mainnet.chain.robinhood.com'] } },
+  rpcUrls: { default: { http: RPC_URLS } },
   blockExplorers: { default: { name: 'Blockscout', url: 'https://robinhoodchain.blockscout.com' } },
 })
 
@@ -39,7 +50,7 @@ const ERC20_ABI = parseAbi([
 export const txUrl = (hash: string) => `${ROBINHOOD.blockExplorers.default.url}/tx/${hash}`
 export const addressUrl = (address: string) => `${ROBINHOOD.blockExplorers.default.url}/address/${address}`
 
-const publicClient = createPublicClient({ chain: ROBINHOOD, transport: http() })
+const publicClient = createPublicClient({ chain: ROBINHOOD, transport: transport() })
 
 export function treasuryAccount() {
   const key = process.env.AGENT_WALLET_PRIVATE_KEY
@@ -123,7 +134,23 @@ export async function buyAndActivate(opts: {
 }): Promise<Purchase> {
   const account = treasuryAccount()
   if (!account) throw new RefuelError('no treasury wallet configured (AGENT_WALLET_PRIVATE_KEY)')
-  const wallet = createWalletClient({ account, chain: ROBINHOOD, transport: http() })
+  const wallet = createWalletClient({ account, chain: ROBINHOOD, transport: transport() })
+
+  /**
+   * Signs locally, so the hash is known before broadcast, then sends through the fallback RPCs. If
+   * an endpoint already has it ("already known"), the transaction is out there: wait for it.
+   */
+  const send = async (to: Hex, data: Hex): Promise<Hex> => {
+    const prepared = await wallet.prepareTransactionRequest({ account, to, data, chain: ROBINHOOD })
+    const serialized = await wallet.signTransaction(prepared)
+    const hash = keccak256(serialized)
+    try {
+      await wallet.sendRawTransaction({ serializedTransaction: serialized })
+    } catch (err) {
+      if (!/already known|known transaction|nonce too low/i.test(String(err))) throw err
+    }
+    return hash
+  }
   const treasury = (await readTreasury())!
   const need = Number(formatUnits(opts.usdgIn, 6))
   if (treasury.usdg < need) throw new RefuelError(`treasury holds ${treasury.usdg} USDG, needs ${need}`)
@@ -147,7 +174,7 @@ export async function buyAndActivate(opts: {
     args: [account.address, CONTRACTS.exchange],
   })) as bigint
   if (allowance < spendCap) {
-    const hash = await wallet.writeContract({ address: CONTRACTS.usdg, abi: ERC20_ABI, functionName: 'approve', args: [CONTRACTS.exchange, spendCap] })
+    const hash = await send(CONTRACTS.usdg, encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [CONTRACTS.exchange, spendCap] }))
     const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 })
     if (receipt.status !== 'success') throw new RefuelError(`USDG approval reverted: ${txUrl(hash)}`)
     gasWei += receipt.gasUsed * receipt.effectiveGasPrice
@@ -156,14 +183,10 @@ export async function buyAndActivate(opts: {
   }
 
   const beneficiary = pad(opts.beneficiary as Hex, { size: 32 })
-  const { request } = await publicClient.simulateContract({
-    account,
-    address: CONTRACTS.exchange,
-    abi: EXCHANGE_ABI,
-    functionName: 'buyAndActivate',
-    args: [opts.usdgIn, minCreditOut, beneficiary, q.maxFills],
-  })
-  const hash = await wallet.writeContract(request)
+  const call = { abi: EXCHANGE_ABI, functionName: 'buyAndActivate', args: [opts.usdgIn, minCreditOut, beneficiary, q.maxFills] } as const
+  // Simulate first: a purchase that would revert costs nothing and says why.
+  await publicClient.simulateContract({ account, address: CONTRACTS.exchange, ...call })
+  const hash = await send(CONTRACTS.exchange, encodeFunctionData(call))
   const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 })
   if (receipt.status !== 'success') throw new RefuelError(`buyAndActivate reverted: ${txUrl(hash)}`)
   gasWei += receipt.gasUsed * receipt.effectiveGasPrice
