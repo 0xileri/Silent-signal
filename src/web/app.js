@@ -96,6 +96,17 @@
         b.disabled = false
       }
     }
+    const fuel = e.target.closest('[data-fuel]')
+    if (fuel) {
+      fuel.disabled = true
+      try {
+        await post('/api/refuel')
+        toast('Refueling: buying CREDIT on Robinhood Chain…')
+        refresh()
+      } catch (err) {
+        toast(err.message)
+      }
+    }
     const t = e.target.closest('[data-focus]')
     if (t) {
       focus = t.dataset.focus
@@ -138,7 +149,7 @@
       <div class="k">Real Orbio balance</div>
       <div class="money-big">${latest ? usd(latest.balanceUsd, 4) : '—'}</div>
       <div class="muted" style="font-size:.8rem">orbio_get_balance · ${latest ? `read ${time(latest.at)}` : 'not read yet'}${S.balance.start !== null ? ` · ${usd(S.balance.start, 4)} at agent start` : ''}</div>
-      <div style="margin-top:16px" class="k">Mission budget ${usd(b.budgetUsd, 2)}</div>
+      <div style="margin-top:16px" class="k">Mission budget ${usd(b.budgetUsd, 2)}${b.refueledUsd ? ` (${usd(b.baseBudgetUsd, 2)} + ${usd(b.refueledUsd, 2)} refueled)` : ''}</div>
       <div class="stack" title="spent / available / reserve">
         <div class="spent" style="width:${w(b.spentUsd)}"></div>
         <div class="avail" style="width:${w(avail)}"></div>
@@ -153,6 +164,7 @@
         <dt>Typical investigation</dt><dd>${b.typicalInvestigationUsd ? usd(b.typicalInvestigationUsd, 4) : '—'}</dd>
         <dt>Runway</dt><dd>${b.runway !== null ? `≈ ${b.runway} investigations` : '—'}</dd>
       </dl>
+      ${fuelHtml()}
       <div class="keybox">
         <span class="badge ${esc(k.state)}">${k.state === 'active' ? 'key active' : k.state === 'none' ? 'no key' : `key ${esc(k.state)}`}</span>
         <code>${k.prefix ? esc(k.prefix) + '…' : '—'}</code>
@@ -163,6 +175,24 @@
       <ul class="keyevents">${k.events.slice(0, 5).map((e) => `<li>${time(e.at)} <b>${esc(e.event)}</b> ${e.prefix ? esc(e.prefix) + '… ' : ''}· ${esc(e.detail)}</li>`).join('')}</ul>
       <div class="muted" style="font-size:.78rem;margin-top:8px">Tracers and cross-checkers are hired by auction · verifier: ${esc(S.policy.models.verifier)} · anomaly revoke above ${usd(S.policy.anomalyCallUsd, 2)}/call</div>`
 )
+  }
+
+  function fuelHtml() {
+    const f = S.fuel
+    if (!f || !f.configured) return ''
+    const t = f.treasury
+    const last = f.refuels[0]
+    const short = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—'
+    const lastHtml = last
+      ? `<div class="refuel"><span class="badge ${last.status === 'confirmed' ? 'ok' : last.status === 'failed' ? 'bad' : 'busy'}">${esc(last.status)}</span> ${time(last.at)} · ${last.usdgSpent ?? last.usdgIn} USDG${last.creditOut ? ` → ${last.creditOut} CREDIT` : ''}${last.status === 'confirmed' && last.topUpsAfter !== null ? ` · +${usd(last.topUpsAfter - last.topUpsBefore, 4)} in Orbio` : ''}${last.buyTxUrl ? ` · <a href="${esc(last.buyTxUrl)}" target="_blank" rel="noopener">tx</a>` : ''}<div class="muted">${esc(last.error || last.reason)}</div></div>`
+      : '<div class="muted" style="font-size:.8rem">No refuels yet.</div>'
+    return `<div class="fuel">
+      <div class="k">Treasury · Robinhood Chain</div>
+      <div class="fuelrow"><a href="${esc(f.treasuryUrl)}" target="_blank" rel="noopener" class="mono">${short(t && t.address)}</a><span class="mono">${t ? `${t.usdg.toFixed(2)} USDG · ${t.eth.toFixed(5)} ETH` : 'not read yet'}</span></div>
+      <div class="muted" style="font-size:.78rem">${f.enabled ? `Refuels ${f.policy.usdg} USDG when the runway drops below ${f.policy.whenRunwayBelow} investigations, only under $${f.policy.maxPrice}/CREDIT, at most ${f.policy.maxUsdgPerDay} USDG a day.` : 'Automatic refuel is off.'}</div>
+      ${lastHtml}
+      <button class="small" data-fuel ${f.refueling ? 'disabled' : ''}>${f.refueling ? 'Refueling…' : 'Refuel now'}</button>
+    </div>`
   }
 
   // ── signal ────────────────────────────────────────────────────────────────────────────────────

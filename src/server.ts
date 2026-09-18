@@ -5,8 +5,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { serve } from '@hono/node-server'
 import { Hono, type Context } from 'hono'
 import {
-  claimKey, demoCooldownLeft, holdsKey, isBusy, revokeAgentKey, rotateKey, runDemo, scan, setPaused, snapshot, startAgent,
+  claimKey, demoCooldownLeft, holdsKey, isBusy, refuel, revokeAgentKey, rotateKey, runDemo, scan, setPaused, snapshot, startAgent,
 } from './agent/coordinator.js'
+import { treasuryAccount } from './chain/refuel.js'
 import { ADMIN_TOKEN, PORT, PUBLIC_URL, SCHEDULE } from './config.js'
 import { log } from './core/log.js'
 import { saveNow, state } from './core/state.js'
@@ -106,6 +107,13 @@ app.post('/api/agent/resume', (c) => {
   if (!isAdmin(c)) return denied(c)
   setPaused(false)
   return c.json({ ok: true })
+})
+// Refuel now, from the treasury. The policy also refuels on its own when the runway runs short.
+app.post('/api/refuel', (c) => {
+  if (!isAdmin(c)) return denied(c)
+  if (!treasuryAccount()) return c.json({ error: 'No treasury wallet is configured.' }, 400)
+  refuel('operator', 'operator pressed Refuel').catch((err) => log('ERROR', `refuel failed: ${failure(err)}`))
+  return c.json({ started: true }, 202)
 })
 app.get('/api/operator', (c) => c.json({ required: !!ADMIN_TOKEN, ok: isAdmin(c) }))
 

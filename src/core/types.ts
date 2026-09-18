@@ -213,3 +213,27 @@ export interface WorkerRecord {
   latencyMsSum: number
   recent: { at: string; investigationId: string; quality: number; notes: string[] }[]
 }
+
+/** One self-refuel: an on-chain purchase and activation, then confirmation in the Orbio balance. */
+export interface Refuel {
+  id: string
+  at: string
+  trigger: 'policy' | 'operator'
+  reason: string
+  status: 'buying' | 'confirming' | 'confirmed' | 'unconfirmed' | 'failed'
+  usdgIn: number
+  usdgSpent: number | null
+  creditOut: number | null
+  price: number | null
+  activationId: string | null
+  activatedUsd: number | null
+  approveTx: string | null
+  buyTx: string | null
+  beneficiary: string | null
+  gasEth: number | null
+  topUpsBefore: number | null
+  topUpsAfter: number | null
+  balanceBefore: number | null
+  balanceAfter: number | null
+  error: string | null
+}

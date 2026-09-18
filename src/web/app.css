@@ -212,6 +212,11 @@ footer a { color: inherit; }
 .mono { font-family: var(--mono); }
 
 .a.MARKET { color: var(--info); }
+.a.FUEL { color: var(--ok); }
+.fuel { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--surface-2); display: grid; gap: 6px; }
+.fuelrow { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .86rem; }
+.refuel { font-size: .8rem; }
+.fuel button { justify-self: start; }
 .auctions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 12px; }
 @media (max-width: 800px) { .auctions { grid-template-columns: 1fr; } }
 .auction { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }

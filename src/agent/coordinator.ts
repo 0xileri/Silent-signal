@@ -4,12 +4,15 @@
 //
 // State machine: IDLE → SCANNING → EVALUATING → (WATCHING | FUNDING → INVESTIGATING → VERIFYING →
 // ACCEPTED | REJECTED → ALERTED) → IDLE
-import { MISSION, MODELS, POLICY, SCHEDULE, SIGNAL } from '../config.js'
+import { randomBytes } from 'node:crypto'
+import { parseUnits } from 'viem'
+import { MISSION, MODELS, POLICY, REFUEL, SCHEDULE, SIGNAL } from '../config.js'
 import { log, recentLog } from '../core/log.js'
-import { lastBalance, missionSpentUsd, save, state, type BalanceReading } from '../core/state.js'
-import type { Decision, SignalCluster } from '../core/types.js'
+import { lastBalance, missionBudgetUsd, missionSpentUsd, refueledUsd, save, state, type BalanceReading } from '../core/state.js'
+import type { Decision, Refuel, SignalCluster } from '../core/types.js'
+import { addressUrl, buyAndActivate, readTreasury, treasuryAccount, txUrl, type Treasury } from '../chain/refuel.js'
 import { DEMO_POSTS, DEMO_SOURCES, fixtureRun, releaseWave, startFixtureRun } from '../demo/fixture.js'
-import { createKey, getBalance, getKeyStatus, keyAnswers, revokeKey as orbioRevoke, type HeldKey } from '../orbio/keys.js'
+import { createKey, getBalance, getKeyStatus, keyAnswers, revokeKey as orbioRevoke, topUps, type HeldKey } from '../orbio/keys.js'
 import { budgetLimits, decide } from './budget-policy.js'
 import { MARKET, marketView } from './market.js'
 import { planInvestigation, postsOf, runInvestigation } from './investigation.js'
@@ -34,6 +37,9 @@ const runtime = {
   scanning: false,
   investigating: null as string | null,
   demo: { running: false, wave: 0, lastStartedAt: 0 },
+  refueling: false,
+  treasury: null as Treasury | null,
+  fuelNoticeAt: 0,
 }
 
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`
@@ -123,7 +129,7 @@ export async function startAgent(): Promise<void> {
   const limits = budgetLimits(missionSpentUsd())
   log(
     'AGENT',
-    `mission: ${MISSION.statement} · budget ${usd(POLICY.budgetUsd)} (${usd(limits.remaining)} left) · reserve ${POLICY.reserveShare * 100}% · max ${POLICY.maxPerInvestigationShare * 100}% per investigation`,
+    `mission: ${MISSION.statement} · budget ${usd(missionBudgetUsd())} (${usd(limits.remaining)} left) · reserve ${POLICY.reserveShare * 100}% · max ${POLICY.maxPerInvestigationShare * 100}% per investigation`,
   )
   try {
     const b = await readBalance('agent start')
@@ -138,6 +144,11 @@ export async function startAgent(): Promise<void> {
     }
     const status = await getKeyStatus()
     log('KEY', `orbio_get_key_status → ${status.hasKey ? `${status.prefix}… active, created ${status.createdAt}` : 'no key'}`)
+    if (treasuryAccount()) {
+      runtime.treasury = await readTreasury().catch(() => null)
+      const t = runtime.treasury
+      log('FUEL', t ? `treasury ${t.address} on Robinhood Chain: ${t.usdg} USDG, ${t.eth} ETH` : 'treasury configured but unreadable')
+    }
   } catch (err) {
     runtime.orbio.error = err instanceof Error ? err.message : String(err)
     log('ERROR', `Orbio unavailable: ${runtime.orbio.error}. The watcher still runs for free; paid work is disabled.`)
@@ -237,6 +248,7 @@ async function scanOnce(reason: string): Promise<void> {
     } else if (decisions.some((d) => d.decision.action === 'WATCH')) {
       setPhase('WATCHING')
     }
+    await fuelCheck()
   } catch (err) {
     log('ERROR', `scan failed: ${err instanceof Error ? err.message : String(err)}`)
   } finally {
@@ -333,6 +345,132 @@ export async function runDemo(): Promise<void> {
   }
 }
 
+// ── self-refuel ─────────────────────────────────────────────────────────────────────────────────
+
+const DAY = 24 * 3_600_000
+
+/** Typical cost of an investigation, from the last few that spent anything. */
+function typicalInvestigationUsd(): number | null {
+  const costs = state.investigations.slice(-5).map((i) => i.spentUsd).filter((c) => c > 0)
+  return costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : null
+}
+
+/** How many more typical investigations fit before the reserve. */
+export function runway(): number | null {
+  const typical = typicalInvestigationUsd()
+  if (!typical) return null
+  const limits = budgetLimits(missionSpentUsd())
+  return Math.max(0, Math.floor((limits.remaining - limits.reserve) / typical))
+}
+
+/** After every scan: refresh the treasury, settle any refuel still confirming, refuel if the runway is short. */
+async function fuelCheck(): Promise<void> {
+  if (!treasuryAccount()) return
+  runtime.treasury = await readTreasury().catch(() => runtime.treasury)
+  for (const r of state.agent.refuels.filter((r) => r.status === 'unconfirmed')) await confirmRefuel(r, 0)
+  const left = runway()
+  if (!REFUEL.enabled || state.agent.paused || runtime.refueling || left === null || left >= REFUEL.whenRunwayBelow) return
+  const spentToday = state.agent.refuels
+    .filter((r) => Date.parse(r.at) > Date.now() - DAY && r.status !== 'failed')
+    .reduce((sum, r) => sum + r.usdgIn, 0)
+  const recentFailure = state.agent.refuels.some((r) => r.status === 'failed' && Date.parse(r.at) > Date.now() - 3_600_000)
+  const blocked =
+    spentToday + REFUEL.usdg > REFUEL.maxUsdgPerDay ? `the ${REFUEL.maxUsdgPerDay} USDG daily cap is reached`
+    : recentFailure ? 'the last refuel failed less than an hour ago'
+    : !runtime.treasury ? 'the treasury could not be read'
+    : runtime.treasury.usdg < REFUEL.usdg ? `the treasury holds ${runtime.treasury.usdg} USDG, needs ${REFUEL.usdg}`
+    : runtime.treasury.eth <= 0 ? 'the treasury has no ETH for gas'
+    : null
+  if (blocked) {
+    if (Date.now() - runtime.fuelNoticeAt > 3_600_000) {
+      log('FUEL', `runway is ${left} investigations (refuel below ${REFUEL.whenRunwayBelow}), but ${blocked}`)
+      runtime.fuelNoticeAt = Date.now()
+    }
+    return
+  }
+  await refuel('policy', `runway is down to ${left} investigation${left === 1 ? '' : 's'} (refuel below ${REFUEL.whenRunwayBelow})`)
+}
+
+/**
+ * Buys CREDIT with the treasury's USDG and activates it into the Orbio account the agent spends
+ * from, then waits until orbio_get_balance shows it. Only a confirmed refuel counts toward the budget.
+ */
+export async function refuel(trigger: Refuel['trigger'], reason: string): Promise<Refuel> {
+  if (runtime.refueling) throw new Error('a refuel is already running')
+  runtime.refueling = true
+  const r: Refuel = {
+    id: `fuel_${randomBytes(3).toString('hex')}`, at: new Date().toISOString(), trigger, reason, status: 'buying', usdgIn: REFUEL.usdg,
+    usdgSpent: null, creditOut: null, price: null, activationId: null, activatedUsd: null, approveTx: null, buyTx: null, beneficiary: null,
+    gasEth: null, topUpsBefore: null, topUpsAfter: null, balanceBefore: null, balanceAfter: null, error: null,
+  }
+  state.agent.refuels.push(r)
+  save()
+  try {
+    log('FUEL', `${reason}: buying CREDIT with ${REFUEL.usdg} USDG from the treasury (only below $${REFUEL.maxPrice} per CREDIT)`)
+    const before = await getBalance()
+    r.balanceBefore = before.balanceUsd
+    r.topUpsBefore = topUps(before)
+    r.beneficiary = REFUEL.beneficiary ?? before.wallets[0] ?? null
+    if (!r.beneficiary) throw new Error('orbio_get_balance lists no wallet to activate CREDIT for')
+    log('FUEL', `beneficiary ${r.beneficiary}, the wallet orbio_get_balance lists for this account`)
+    const p = await buyAndActivate({
+      usdgIn: parseUnits(String(REFUEL.usdg), 6),
+      beneficiary: r.beneficiary,
+      maxPrice: REFUEL.maxPrice,
+      slippage: REFUEL.slippage,
+      onStep: (step) => log('FUEL', step),
+    })
+    Object.assign(r, {
+      usdgSpent: p.usdgSpent, creditOut: p.creditOut, price: p.quote.price, activationId: p.activationId,
+      activatedUsd: p.activatedUsd, approveTx: p.approveTx, buyTx: p.buyTx, gasEth: p.gasEth, status: 'confirming',
+    })
+    save()
+    log(
+      'FUEL',
+      `buyAndActivate: ${p.usdgSpent} USDG → ${p.creditOut} CREDIT activated (#${p.activationId}) for $${p.activatedUsd} of AI balance · gas ${p.gasEth.toFixed(8)} ETH · ${txUrl(p.buyTx)}`,
+    )
+    await confirmRefuel(r, REFUEL.confirmTimeoutSec)
+    runtime.treasury = await readTreasury().catch(() => runtime.treasury)
+  } catch (err) {
+    r.status = 'failed'
+    r.error = err instanceof Error ? err.message : String(err)
+    log('ERROR', `refuel failed: ${r.error}`)
+  } finally {
+    runtime.refueling = false
+    save()
+  }
+  return r
+}
+
+/** Waits (up to `timeoutSec`) for the activation to show as new money in orbio_get_balance. */
+async function confirmRefuel(r: Refuel, timeoutSec: number): Promise<void> {
+  if (r.topUpsBefore === null || !r.activatedUsd) return
+  const deadline = Date.now() + timeoutSec * 1000
+  for (;;) {
+    const b = await getBalance().catch(() => null)
+    if (b) {
+      r.topUpsAfter = topUps(b)
+      r.balanceAfter = b.balanceUsd
+      if (r.topUpsAfter - r.topUpsBefore >= r.activatedUsd * 0.95) {
+        r.status = 'confirmed'
+        save()
+        log(
+          'FUEL',
+          `confirmed in orbio_get_balance: new money +$${(r.topUpsAfter - r.topUpsBefore).toFixed(6)} (balance ${r.balanceBefore?.toFixed(6)} → ${b.balanceUsd.toFixed(6)}); mission budget is now ${usd(missionBudgetUsd())}`,
+        )
+        return
+      }
+    }
+    if (Date.now() >= deadline) break
+    await sleep(5000)
+  }
+  if (r.status !== 'unconfirmed') {
+    r.status = 'unconfirmed'
+    save()
+    log('FUEL', 'activated on-chain, but not visible in orbio_get_balance yet; it counts toward the budget only once it is')
+  }
+}
+
 // ── operator controls ───────────────────────────────────────────────────────────────────────────
 
 export function setPaused(paused: boolean): void {
@@ -396,15 +534,26 @@ export function snapshot() {
       latest: lastBalance(),
       history: state.agent.balances.slice(-60).map((b) => ({ at: b.at, usd: b.balanceUsd })),
     },
+    fuel: {
+      configured: !!treasuryAccount(),
+      enabled: REFUEL.enabled,
+      policy: { whenRunwayBelow: REFUEL.whenRunwayBelow, usdg: REFUEL.usdg, maxPrice: REFUEL.maxPrice, maxUsdgPerDay: REFUEL.maxUsdgPerDay },
+      treasury: runtime.treasury,
+      treasuryUrl: treasuryAccount() ? addressUrl(treasuryAccount()!.address) : null,
+      refueling: runtime.refueling,
+      refuels: state.agent.refuels.slice(-8).reverse().map((r) => ({ ...r, buyTxUrl: r.buyTx ? txUrl(r.buyTx) : null })),
+    },
     budget: {
-      budgetUsd: POLICY.budgetUsd,
+      budgetUsd: missionBudgetUsd(),
+      baseBudgetUsd: POLICY.budgetUsd,
+      refueledUsd: refueledUsd(),
       spentUsd: spent,
       remainingUsd: limits.remaining,
       reserveUsd: limits.reserve,
       capUsd: limits.cap,
       availableUsd: limits.available,
       typicalInvestigationUsd: typical,
-      runway: typical ? Math.floor((limits.remaining - limits.reserve) / typical) : null,
+      runway: runway(),
     },
     sources: runtime.sources.map((r) => ({ name: r.source.name, type: r.source.type, url: r.source.url, ok: r.ok, items: r.items, cached: r.cached, error: r.error, at: r.at })),
     stats: {

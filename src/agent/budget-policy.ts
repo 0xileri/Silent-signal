@@ -2,6 +2,7 @@
 // investigation spend? Every check is recorded with its numbers, so the dashboard can show exactly
 // why the agent did or didn't spend.
 import { MISSION, POLICY, SIGNAL } from '../config.js'
+import { missionBudgetUsd } from '../core/state.js'
 import type { Action, Check, ClusterMetrics, SignalCluster } from '../core/types.js'
 
 export interface PolicyInput {
@@ -27,10 +28,10 @@ export interface PolicyResult {
 
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`
 
-export const budgetLimits = (missionSpentUsd: number) => {
-  const reserve = POLICY.budgetUsd * POLICY.reserveShare
-  const cap = POLICY.budgetUsd * POLICY.maxPerInvestigationShare
-  const remaining = Math.max(0, POLICY.budgetUsd - missionSpentUsd)
+export const budgetLimits = (missionSpentUsd: number, budgetUsd = missionBudgetUsd()) => {
+  const reserve = budgetUsd * POLICY.reserveShare
+  const cap = budgetUsd * POLICY.maxPerInvestigationShare
+  const remaining = Math.max(0, budgetUsd - missionSpentUsd)
   return { reserve, cap, remaining, available: Math.max(0, Math.min(cap, remaining - reserve)) }
 }
 
@@ -68,7 +69,7 @@ export function decide(input: PolicyInput): PolicyResult {
     {
       label: 'Reserve protected',
       ok: estimateUsd !== null && allocation >= estimateUsd,
-      detail: `${usd(limits.remaining)} left of ${usd(POLICY.budgetUsd)}, reserve ${usd(limits.reserve)} untouchable → ${usd(allocation)} available`,
+      detail: `${usd(limits.remaining)} left of ${usd(missionBudgetUsd())}, reserve ${usd(limits.reserve)} untouchable → ${usd(allocation)} available`,
     },
     {
       label: 'Orbio balance covers it',

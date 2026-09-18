@@ -14,6 +14,7 @@ export type Actor =
   | 'KEY'
   | 'WORKER'
   | 'MARKET'
+  | 'FUEL'
   | 'VERIFIER'
   | 'SPEND'
   | 'ALERT'

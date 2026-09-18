@@ -14,8 +14,19 @@ export interface Balance {
   spentUsd: number
   accruedUsd: number
   purchasedUsd: number
+  depositedUsd: number
+  claimedUsd: number
+  /** The wallets Orbio lists for this account: where activated CREDIT lands. */
+  wallets: string[]
   at: string
 }
+
+/**
+ * Money that came in other than $ORBIO accrual: purchases, deposits, activations. Spending moves
+ * credit from `balance` to `spent`, so their sum only rises when new money arrives.
+ */
+export const topUps = (b: Pick<Balance, 'balanceUsd' | 'spentUsd' | 'accruedUsd'>) =>
+  Math.round((b.balanceUsd + b.spentUsd - b.accruedUsd) * 1e6) / 1e6
 
 export interface KeyStatus {
   hasKey: boolean
@@ -61,12 +72,23 @@ async function callTool<T>(name: string, args: Record<string, unknown> = {}): Pr
 }
 
 export async function getBalance(): Promise<Balance> {
-  const b = await callTool<{ balance: Usd; spent: Usd; accrued: Usd; purchased?: Usd }>('orbio_get_balance')
+  const b = await callTool<{
+    balance: Usd
+    spent: Usd
+    accrued: Usd
+    purchased?: Usd
+    deposited?: Usd
+    claimed?: Usd
+    wallets?: string[]
+  }>('orbio_get_balance')
   return {
     balanceUsd: b.balance.usd,
     spentUsd: b.spent.usd,
     accruedUsd: b.accrued.usd,
     purchasedUsd: b.purchased?.usd ?? 0,
+    depositedUsd: b.deposited?.usd ?? 0,
+    claimedUsd: b.claimed?.usd ?? 0,
+    wallets: b.wallets ?? [],
     at: new Date().toISOString(),
   }
 }

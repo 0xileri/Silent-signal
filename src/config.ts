@@ -79,6 +79,23 @@ export const SCHEDULE = {
   demoCooldownSec: num('DEMO_COOLDOWN_SEC', 150),
 }
 
+/**
+ * Self-refuel from the agent's treasury on Robinhood Chain. When the runway (investigations left
+ * before the reserve) drops below the trigger, the agent buys CREDIT from Orbio's order book and
+ * activates it into the account it spends from. It only buys at a discount, within a daily cap.
+ */
+export const REFUEL = {
+  enabled: process.env.REFUEL !== 'off',
+  whenRunwayBelow: num('REFUEL_WHEN_RUNWAY_BELOW', 3),
+  usdg: num('REFUEL_USDG', 2),
+  maxPrice: num('REFUEL_MAX_PRICE', 0.95),
+  slippage: num('REFUEL_SLIPPAGE', 0.01),
+  maxUsdgPerDay: num('REFUEL_MAX_USDG_PER_DAY', 6),
+  /** Where activated CREDIT goes. Default: the wallet orbio_get_balance lists for the account. */
+  beneficiary: process.env.REFUEL_BENEFICIARY,
+  confirmTimeoutSec: num('REFUEL_CONFIRM_SEC', 180),
+}
+
 export const TELEGRAM = {
   token: process.env.TELEGRAM_BOT_TOKEN,
   chatId: process.env.TELEGRAM_CHAT_ID,

@@ -2,7 +2,8 @@
 // embeddings), clusters, investigations, the spend ledger and its own bookkeeping. Saves are
 // batched, so a burst of updates during an investigation is one write.
 import { readJson, writeJson } from './store.js'
-import type { Investigation, SignalCluster, SourceItem, SpendEvent, WorkerRecord } from './types.js'
+import { POLICY } from '../config.js'
+import type { Investigation, Refuel, SignalCluster, SourceItem, SpendEvent, WorkerRecord } from './types.js'
 
 export interface BalanceReading {
   at: string
@@ -25,6 +26,8 @@ export interface AgentMemory {
   keyEvents: { at: string; event: 'claim' | 'rotate' | 'revoke' | 'retired'; prefix: string | null; detail: string }[]
   /** The worker market's track records, by worker id. */
   reputation: Record<string, WorkerRecord>
+  /** Self-refuels from the treasury, newest last. */
+  refuels: Refuel[]
 }
 
 interface State {
@@ -53,6 +56,7 @@ const empty = (): State => ({
     itemsRead: 0,
     keyEvents: [],
     reputation: {},
+    refuels: [],
   },
 })
 
@@ -83,6 +87,11 @@ export function saveNow(): void {
     agent: { ...state.agent, balances: state.agent.balances.slice(-500), keyEvents: state.agent.keyEvents.slice(-100) },
   } satisfies State)
 }
+
+/** The operator's budget plus every refuel confirmed in the Orbio balance: the agent may spend what it bought. */
+export const refueledUsd = () =>
+  Math.round((state.agent.refuels ?? []).filter((r) => r.status === 'confirmed').reduce((sum, r) => sum + (r.activatedUsd ?? 0), 0) * 1e6) / 1e6
+export const missionBudgetUsd = () => Math.round((POLICY.budgetUsd + refueledUsd()) * 1e6) / 1e6
 
 export const missionSpentUsd = () => Math.round(state.spend.reduce((sum, s) => sum + s.costUsd, 0) * 1e6) / 1e6
 export const lastBalance = () => state.agent.balances.at(-1) ?? null
