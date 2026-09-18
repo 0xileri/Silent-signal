@@ -13,6 +13,7 @@ export type Actor =
   | 'BALANCE'
   | 'KEY'
   | 'WORKER'
+  | 'MARKET'
   | 'VERIFIER'
   | 'SPEND'
   | 'ALERT'

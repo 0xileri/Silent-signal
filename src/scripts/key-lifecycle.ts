@@ -5,14 +5,14 @@ import '../env.js'
 import OpenAI from 'openai'
 import { createKey, getBalance, getKeyStatus, keyAnswers, revokeKey, type HeldKey } from '../orbio/keys.js'
 import { priceOf } from '../orbio/gateway.js'
-import { MODELS } from '../config.js'
+const MODEL = 'anthropic/claude-haiku-4.5'
 
 const usd = (n: number) => `$${n.toFixed(6)}`
 const step = (label: string, detail: string) => console.log(`${label.padEnd(26)} ${detail}`)
 
 async function ping(key: HeldKey) {
   const res = await new OpenAI({ apiKey: key.secret, baseURL: key.baseUrl, maxRetries: 0 }).chat.completions.create({
-    model: MODELS.worker,
+    model: MODEL,
     messages: [{ role: 'user', content: 'Reply with exactly one word: ready' }],
     max_tokens: 5,
   })
@@ -29,9 +29,9 @@ step('orbio_get_key_status', `hasKey ${status.hasKey}, prefix ${status.prefix}鈥
 step('GET /key (free)', `HTTP ${(await keyAnswers(first.key)).status}`)
 
 const reply = await ping(first.key)
-const price = await priceOf(MODELS.worker)
+const price = await priceOf(MODEL)
 const metered = reply.usage.prompt_tokens * price.prompt + reply.usage.completion_tokens * price.completion
-step(`paid call (${MODELS.worker})`, `"${reply.text}" 路 ${reply.usage.prompt_tokens}+${reply.usage.completion_tokens} tokens 路 ${usd(metered)} at list price${typeof reply.usage.cost === 'number' ? ` 路 gateway reports ${usd(reply.usage.cost)}` : ''}`)
+step(`paid call (${MODEL})`, `"${reply.text}" 路 ${reply.usage.prompt_tokens}+${reply.usage.completion_tokens} tokens 路 ${usd(metered)} at list price${typeof reply.usage.cost === 'number' ? ` 路 gateway reports ${usd(reply.usage.cost)}` : ''}`)
 let after = await getBalance()
 for (let i = 0; i < 5 && after.balanceUsd === start.balanceUsd; i++) {
   await new Promise((resolve) => setTimeout(resolve, 1500))

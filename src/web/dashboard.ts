@@ -58,6 +58,7 @@ export function dashboardPage(): string {
 
 <div class="grid3">
   <section class="card" id="spend"></section>
+  <section class="card" id="market"></section>
   <section class="card" id="background"></section>
   <section class="card" id="sources"></section>
 </div>

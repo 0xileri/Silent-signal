@@ -2,7 +2,7 @@
 // embeddings), clusters, investigations, the spend ledger and its own bookkeeping. Saves are
 // batched, so a burst of updates during an investigation is one write.
 import { readJson, writeJson } from './store.js'
-import type { Investigation, SignalCluster, SourceItem, SpendEvent } from './types.js'
+import type { Investigation, SignalCluster, SourceItem, SpendEvent, WorkerRecord } from './types.js'
 
 export interface BalanceReading {
   at: string
@@ -23,6 +23,8 @@ export interface AgentMemory {
   lastScanAt: string | null
   itemsRead: number
   keyEvents: { at: string; event: 'claim' | 'rotate' | 'revoke' | 'retired'; prefix: string | null; detail: string }[]
+  /** The worker market's track records, by worker id. */
+  reputation: Record<string, WorkerRecord>
 }
 
 interface State {
@@ -50,6 +52,7 @@ const empty = (): State => ({
     lastScanAt: null,
     itemsRead: 0,
     keyEvents: [],
+    reputation: {},
   },
 })
 

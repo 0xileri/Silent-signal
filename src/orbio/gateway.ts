@@ -13,6 +13,8 @@ export interface Price {
 
 export class BudgetError extends Error {}
 export class KeyRejectedError extends Error {}
+/** The model answered and was paid for, but not in the required shape (cut off, or off-schema). */
+export class AnswerError extends Error {}
 
 const prices = new Map<string, Promise<Price>>()
 
@@ -107,9 +109,14 @@ export async function meteredCall<T>(opts: {
   }
   opts.onSpend(spend)
   const content = res.choices[0]?.message.content ?? ''
-  // Structured output should be bare JSON; tolerate a model wrapping it in prose or fences.
-  const json = JSON.parse(content.slice(content.indexOf('{'), content.lastIndexOf('}') + 1))
-  return { data: opts.parse(json), ...spend }
+  try {
+    // Structured output should be bare JSON; tolerate a model wrapping it in prose or fences.
+    const json = JSON.parse(content.slice(content.indexOf('{'), content.lastIndexOf('}') + 1))
+    return { data: opts.parse(json), ...spend }
+  } catch (err) {
+    if (res.choices[0]?.finish_reason === 'length') throw new AnswerError(`answer cut off at the ${opts.maxTokens}-token cap`)
+    throw new AnswerError(`answer did not fit the schema (${err instanceof Error ? err.message.slice(0, 120) : String(err)})`)
+  }
 }
 
 export const round6 = (n: number) => Math.round(n * 1e6) / 1e6

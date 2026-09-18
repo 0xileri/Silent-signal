@@ -90,6 +90,9 @@ export type WorkerId = 'source-tracer' | 'cross-checker' | 'verifier'
 export interface WorkerRun {
   id: WorkerId
   role: string
+  /** The market worker hired for this role, and its model. */
+  bidder: string
+  label: string
   model: string
   status: 'waiting' | 'running' | 'done' | 'failed' | 'skipped'
   estimateUsd: number
@@ -98,6 +101,31 @@ export interface WorkerRun {
   finishedAt: string | null
   output: unknown
   error: string | null
+  completionTokens: number
+  latencyMs: number | null
+  /** A cut-off or off-schema answer gets one retry with a bigger cap; the grade remembers it. */
+  retried?: boolean
+  /** The code's grade of this job, which moves the worker's reputation. */
+  grade: { quality: number; notes: string[]; reputationBefore: number; reputationAfter: number } | null
+}
+
+export interface Bid {
+  bidder: string
+  label: string
+  model: string
+  bidUsd: number
+  worstUsd: number
+  reputation: number
+  jobs: number
+  eligible: boolean
+  utility: number | null
+}
+
+export interface Auction {
+  role: WorkerId
+  bids: Bid[]
+  winner: string
+  reason: string
 }
 
 export interface EvidenceDoc {
@@ -149,6 +177,7 @@ export interface Investigation {
   keyPrefix: string | null
   contract: { task: string; deadlineSec: number; successConditions: string[] }
   trigger: { score: number; mentions: number; uniqueSources: number; last15: number; prev15: number }
+  auctions: Auction[]
   workers: WorkerRun[]
   evidence: EvidenceDoc[]
   artifact: Artifact | null
@@ -163,6 +192,7 @@ export interface SpendEvent {
   at: string
   investigationId: string
   workerId: WorkerId
+  bidder?: string
   model: string
   purpose: string
   promptTokens: number
@@ -172,4 +202,14 @@ export interface SpendEvent {
   keyPrefix: string
   balanceBefore: number | null
   balanceAfter: number | null
+}
+
+/** One worker's track record in the market (see src/agent/market.ts). */
+export interface WorkerRecord {
+  jobs: number
+  qualitySum: number
+  costSum: number
+  completionTokensSum: number
+  latencyMsSum: number
+  recent: { at: string; investigationId: string; quality: number; notes: string[] }[]
 }

@@ -11,7 +11,8 @@ import type { Decision, SignalCluster } from '../core/types.js'
 import { DEMO_POSTS, DEMO_SOURCES, fixtureRun, releaseWave, startFixtureRun } from '../demo/fixture.js'
 import { createKey, getBalance, getKeyStatus, keyAnswers, revokeKey as orbioRevoke, type HeldKey } from '../orbio/keys.js'
 import { budgetLimits, decide } from './budget-policy.js'
-import { planCost, postsOf, runInvestigation } from './investigation.js'
+import { MARKET, marketView } from './market.js'
+import { planInvestigation, postsOf, runInvestigation } from './investigation.js'
 import { assignToCluster } from '../watcher/cluster.js'
 import { claimText, embed } from '../watcher/embed.js'
 import { measure } from '../watcher/score.js'
@@ -251,7 +252,7 @@ async function scanOnce(reason: string): Promise<void> {
 
 async function evaluate(cluster: SignalCluster, balanceUsd: number | null): Promise<Decision> {
   const { metrics, factors, score } = measure(cluster, state.items, state.clusters)
-  const estimateUsd = metrics.onMission && score >= SIGNAL.investigateAt ? await planCost(cluster).then((p) => p.total, () => null) : null
+  const estimateUsd = metrics.onMission && score >= SIGNAL.investigateAt ? await planInvestigation(cluster).then((p) => p.total, () => null) : null
   const result = decide({
     cluster,
     score,
@@ -375,6 +376,7 @@ export function snapshot() {
   return {
     mission: { ...MISSION },
     policy: { ...POLICY, ...limits, models: MODELS, signal: SIGNAL },
+    market: { ...MARKET, workers: marketView() },
     schedule: { enabled: SCHEDULE.enabled, scanEveryMin: SCHEDULE.scanEveryMin, demoWaveDelaySec: SCHEDULE.demoWaveDelaySec },
     phase: runtime.phase,
     phaseAt: runtime.phaseAt,

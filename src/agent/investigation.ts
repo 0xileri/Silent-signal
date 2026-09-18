@@ -5,15 +5,18 @@
 // is left of it; every paid call is recorded the moment it returns, with the balance around it; a
 // call costing more than the anomaly limit revokes the key on the spot.
 import { randomBytes } from 'node:crypto'
-import { MODELS, POLICY } from '../config.js'
+import { POLICY } from '../config.js'
 import { log } from '../core/log.js'
 import { lastBalance, save, state, type BalanceReading } from '../core/state.js'
-import type { Artifact, Check, Decision, EvidenceDoc, Investigation, SignalCluster, SourceItem, SpendEvent, WorkerId, WorkerRun } from '../core/types.js'
-import { BudgetError, KeyRejectedError, meteredCall, priceOf, round6, tokensIn, usdOf, type Meter } from '../orbio/gateway.js'
+import type {
+  Artifact, Auction, Bid, Check, Decision, EvidenceDoc, Investigation, SignalCluster, SourceItem, SpendEvent, WorkerId, WorkerRun,
+} from '../core/types.js'
+import { AnswerError, BudgetError, KeyRejectedError, meteredCall, round6, type Meter } from '../orbio/gateway.js'
 import type { HeldKey } from '../orbio/keys.js'
 import { sendAlert } from './alert.js'
 import { budgetLimits } from './budget-policy.js'
 import { gatherEvidence } from './evidence.js'
+import { gradeChecker, gradeTracer, gradeVerifier, recordJob, runAuction, type Grade } from './market.js'
 import {
   CHECKER_SCHEMA, CHECKER_SYSTEM, checkerPrompt, CheckerOutput, MAX_TOKENS, postRefs, TRACER_SCHEMA, TRACER_SYSTEM, tracerPrompt,
   TracerOutput, VERIFIER_SCHEMA, VERIFIER_SYSTEM, verifierPrompt, VerifierOutput,
@@ -42,29 +45,37 @@ export function postsOf(cluster: SignalCluster): SourceItem[] {
     .slice(0, 25)
 }
 
-/** The worst case of each planned call, at the gateway's real prices: the workers' "bids". */
-export async function planCost(cluster: SignalCluster): Promise<{ total: number; perWorker: Record<WorkerId, number> }> {
+const ROLES: WorkerId[] = ['source-tracer', 'cross-checker', 'verifier']
+
+/**
+ * The market for this job: one auction per role, priced on this cluster's actual prompt sizes.
+ * `total` is the winners' worst case (full output caps), which is what the budget must cover.
+ */
+export async function planInvestigation(cluster: SignalCluster): Promise<{ total: number; auctions: Auction[] }> {
   const posts = postsOf(cluster)
-  const [worker, verifier] = await Promise.all([priceOf(MODELS.worker), priceOf(MODELS.verifier)])
-  const tracerIn = tokensIn(TRACER_SYSTEM + tracerPrompt(cluster.representativeClaim, posts))
-  const checkerIn = tokensIn(CHECKER_SYSTEM) + tokensIn('x'.repeat(EVIDENCE_CHARS_PLANNED)) + 300
-  const verifierIn =
-    tokensIn(VERIFIER_SYSTEM + verifierPrompt({ claim: cluster.representativeClaim, trigger: '', posts, docs: [], tracer: null, checker: null })) +
-    MAX_TOKENS['source-tracer'] + MAX_TOKENS['cross-checker'] + 300
-  const perWorker = {
-    'source-tracer': round6(usdOf(worker, tracerIn, MAX_TOKENS['source-tracer'])),
-    'cross-checker': round6(usdOf(worker, checkerIn, MAX_TOKENS['cross-checker'])),
-    verifier: round6(usdOf(verifier, verifierIn, MAX_TOKENS.verifier)),
+  const chars: Record<WorkerId, number> = {
+    'source-tracer': (TRACER_SYSTEM + tracerPrompt(cluster.representativeClaim, posts)).length,
+    'cross-checker': CHECKER_SYSTEM.length + EVIDENCE_CHARS_PLANNED + 900,
+    verifier:
+      (VERIFIER_SYSTEM + verifierPrompt({ claim: cluster.representativeClaim, trigger: '', posts, docs: [], tracer: null, checker: null })).length +
+      3 * (MAX_TOKENS['source-tracer'] + MAX_TOKENS['cross-checker'] + 300),
   }
-  return { total: round6(Object.values(perWorker).reduce((a, b) => a + b, 0)), perWorker }
+  const auctions = await Promise.all(ROLES.map((role) => runAuction(role, chars[role], MAX_TOKENS[role])))
+  const total = auctions.reduce((sum, a) => sum + a.bids.find((b) => b.bidder === a.winner)!.worstUsd, 0)
+  return { total: round6(total), auctions }
 }
 
 export async function runInvestigation(cluster: SignalCluster, decision: Decision, deps: InvestigationDeps): Promise<Investigation> {
   const posts = postsOf(cluster)
-  const plan = await planCost(cluster)
-  const worker = (id: WorkerId, role: string, model: string): WorkerRun => ({
-    id, role, model, status: 'waiting', estimateUsd: plan.perWorker[id], costUsd: 0, startedAt: null, finishedAt: null, output: null, error: null,
-  })
+  const plan = await planInvestigation(cluster)
+  const worker = (id: WorkerId, role: string): WorkerRun => {
+    const auction = plan.auctions.find((a) => a.role === id)!
+    const win = auction.bids.find((b) => b.bidder === auction.winner)!
+    return {
+      id, role, bidder: win.bidder, label: win.label, model: win.model, status: 'waiting', estimateUsd: win.bidUsd, costUsd: 0,
+      startedAt: null, finishedAt: null, output: null, error: null, completionTokens: 0, latencyMs: null, grade: null,
+    }
+  }
   const inv: Investigation = {
     id: `inv_${randomBytes(3).toString('hex')}`,
     clusterId: cluster.id,
@@ -96,10 +107,11 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
       last15: decision.metrics.last15,
       prev15: decision.metrics.prev15,
     },
+    auctions: plan.auctions,
     workers: [
-      worker('source-tracer', 'traces the origin and splits the narrative into sub-claims', MODELS.worker),
-      worker('cross-checker', 'checks each sub-claim against official sources and linked pages', MODELS.worker),
-      worker('verifier', 'combines both reports into a calibrated finding', MODELS.verifier),
+      worker('source-tracer', 'traces the origin and splits the narrative into sub-claims'),
+      worker('cross-checker', 'checks each sub-claim against official sources and linked pages'),
+      worker('verifier', 'combines both reports into a calibrated finding'),
     ],
     evidence: [],
     artifact: null,
@@ -121,6 +133,11 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
     `approved ${inv.id}: up to ${usd(inv.maxBudgetUsd)} (worst case ${usd(plan.total)}); reserve ${usd(limits.reserve)} stays untouched`,
     { investigationId: inv.id },
   )
+  for (const a of plan.auctions.filter((a) => a.role !== 'verifier')) {
+    const [win, ...rest] = [...a.bids].sort((x, y) => (x.bidder === a.winner ? -1 : y.bidder === a.winner ? 1 : (y.utility ?? -1) - (x.utility ?? -1)))
+    const bid = (b: Bid) => `${b.bidder} $${b.bidUsd.toFixed(4)} @ ${b.reputation.toFixed(2)}${b.eligible ? '' : ' (below floor)'}`
+    log('MARKET', `${a.role} auction: ${bid(win!)} wins over ${rest.map(bid).join(', ')}; ${a.reason}`, { investigationId: inv.id })
+  }
   const meter: Meter = { limitUsd: inv.maxBudgetUsd, spentUsd: 0 }
   const deadline = Date.now() + POLICY.deadlineSec * 1000
 
@@ -134,20 +151,24 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
     run.status = 'running'
     run.startedAt = new Date().toISOString()
     save()
-    log('WORKER', `${run.id} started on ${run.model}: ${run.role} (bid ${usd(run.estimateUsd)}, ${usd(meter.limitUsd - meter.spentUsd)} left)`)
-    for (let attempt = 0; ; attempt++) {
+    log('WORKER', `${run.id} (${run.bidder}, ${run.label}) started: ${run.role} (bid ${usd(run.estimateUsd)}, ${usd(meter.limitUsd - meter.spentUsd)} left)`)
+    let keyRetried = false
+    let maxTokens: number = MAX_TOKENS[run.id]
+    for (;;) {
       const key = deps.getKey()
       if (!key) throw new Abort('no key: paid work stopped (key revoked)')
       let spend: SpendEvent | null = null
+      const t0 = Date.now()
       try {
         const result = await meteredCall({
-          key, model: run.model, system, user, schemaName, schema, maxTokens: MAX_TOKENS[run.id], meter, parse,
+          key, model: run.model, system, user, schemaName, schema, maxTokens, meter, parse,
           onSpend: (s) => {
             spend = {
               id: `sp_${randomBytes(3).toString('hex')}`,
               at: new Date().toISOString(),
               investigationId: inv.id,
               workerId: run.id,
+              bidder: run.bidder,
               model: s.model,
               purpose: run.role,
               promptTokens: s.promptTokens,
@@ -160,12 +181,14 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
             }
             state.spend.push(spend)
             run.costUsd = round6(run.costUsd + s.costUsd)
+            run.completionTokens += s.completionTokens
             inv.spentUsd = meter.spentUsd
             save()
           },
         })
         run.status = 'done'
         run.output = result.data
+        run.latencyMs = Date.now() - t0
         return result.data
       } catch (err) {
         if (err instanceof BudgetError) {
@@ -174,7 +197,16 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
           log('BUDGET', `${run.id} not started: ${err.message}`)
           return null
         }
-        if (err instanceof KeyRejectedError && attempt === 0 && (await deps.reclaimKey(`gateway rejected ${key.prefix}… during ${run.id}`))) continue
+        if (err instanceof KeyRejectedError && !keyRetried && (await deps.reclaimKey(`gateway rejected ${key.prefix}… during ${run.id}`))) {
+          keyRetried = true
+          continue
+        }
+        if (err instanceof AnswerError && !run.retried) {
+          run.retried = true
+          maxTokens = Math.round(maxTokens * 1.6)
+          log('WORKER', `${run.id} (${run.bidder}): ${err.message}; retrying once with a ${maxTokens}-token cap`)
+          continue
+        }
         run.status = 'failed'
         run.error = err instanceof Error ? err.message : String(err)
         log('ERROR', `${run.id} failed: ${run.error}`)
@@ -201,6 +233,24 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
     }
   }
 
+  /** The code grades the job and the worker's reputation moves. Budget or deadline skips are not the worker's fault. */
+  function review(run: WorkerRun, graded: Grade): void {
+    if (run.status === 'skipped' || run.status === 'waiting') return
+    const grade = run.retried && graded.quality > 0
+      ? { quality: Math.round(graded.quality * 0.85 * 1000) / 1000, notes: [...graded.notes, 'needed a retry after a cut-off or off-schema answer'] }
+      : graded
+    const { before, after } = recordJob(run.bidder, inv.id, grade, {
+      costUsd: run.costUsd,
+      completionTokens: run.completionTokens,
+      latencyMs: run.latencyMs ?? 0,
+    })
+    run.grade = { ...grade, reputationBefore: before, reputationAfter: after }
+    save()
+    log('MARKET', `${run.bidder} graded ${grade.quality.toFixed(2)} (${grade.notes.join('; ')}) · reputation ${before.toFixed(2)} → ${after.toFixed(2)}`, {
+      investigationId: inv.id,
+    })
+  }
+
   let before: BalanceReading | null = null
   try {
     before = await deps.readBalance(`before ${inv.id}`)
@@ -214,6 +264,7 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
     if (tracer) {
       log('WORKER', `source-tracer done: origin ${tracer.origin_ref}, ${tracer.subclaims.length} sub-claims, ${tracer.firsthand_sources} firsthand sources`)
     }
+    review(tracerRun, gradeTracer(tracer, posts))
 
     inv.evidence = await gatherEvidence(posts)
     const fetched = inv.evidence.filter((d) => d.ok)
@@ -224,6 +275,7 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
       const stances = ['supports', 'contradicts', 'context'].map((s) => `${checker.evidence.filter((e) => e.stance === s).length} ${s}`)
       log('WORKER', `cross-checker done: ${stances.join(', ')}; ${checker.gaps.length} gaps`)
     }
+    review(checkerRun, gradeChecker(checker, inv.evidence, subclaims.length))
 
     inv.status = 'verifying'
     deps.setPhase('VERIFYING')
@@ -236,9 +288,13 @@ export async function runInvestigation(cluster: SignalCluster, decision: Decisio
       verifierPrompt({ claim: inv.claim, trigger, posts, docs: inv.evidence, tracer, checker }),
       VERIFIER_SCHEMA, (v) => VerifierOutput.parse(v),
     )
-    if (!verdict) throw new Abort('the verifier did not report')
+    if (!verdict) {
+      review(verifierRun, gradeVerifier(null, []))
+      throw new Abort('the verifier did not report')
+    }
     inv.artifact = toArtifact(verdict, posts, inv.evidence)
     inv.acceptance = accept(verdict, posts, inv.evidence)
+    review(verifierRun, gradeVerifier(verdict, inv.acceptance.checks))
     inv.status = inv.acceptance.accepted ? 'complete' : 'rejected'
     const label = `${verdict.status.replace('_', ' ').toUpperCase()} at ${Math.round(inv.artifact.confidence * 100)}%`
     if (inv.acceptance.accepted) log('VERIFIER', `accepted the artifact: ${label}, recommend ${verdict.recommended_action}`)

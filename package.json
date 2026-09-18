@@ -14,7 +14,8 @@
     "key:lifecycle": "tsx src/scripts/key-lifecycle.ts",
     "fixture:check": "tsx src/scripts/fixture-check.ts",
     "deploy:secrets": "tsx src/scripts/deploy-secrets.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "market:trial": "tsx src/scripts/market-trial.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
@@ -24,6 +25,7 @@
     "hono": "^4.13.8",
     "openai": "^7.18.0",
     "tsx": "^4.23.13",
+    "viem": "^2.56.8",
     "zod": "^4.6.5"
   },
   "devDependencies": {

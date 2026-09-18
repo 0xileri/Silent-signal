@@ -49,8 +49,8 @@ export const POLICY = {
   cooldownSimilarity: num('COOLDOWN_SIMILARITY', 0.8),
 }
 
+/** The verifier is appointed; tracers and cross-checkers are hired by auction (src/agent/market.ts). */
 export const MODELS = {
-  worker: process.env.WORKER_MODEL ?? 'anthropic/claude-haiku-4.5',
   verifier: process.env.VERIFIER_MODEL ?? 'anthropic/claude-sonnet-5',
 }
 

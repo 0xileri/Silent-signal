@@ -226,4 +226,4 @@ export const VERIFIER_SCHEMA = {
 }
 
 /** Output budgets per worker, which also bound the worst-case cost the coordinator plans with. */
-export const MAX_TOKENS = { 'source-tracer': 900, 'cross-checker': 1200, verifier: 1200 } as const
+export const MAX_TOKENS = { 'source-tracer': 1200, 'cross-checker': 1500, verifier: 1600 } as const

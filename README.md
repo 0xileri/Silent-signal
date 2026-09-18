@@ -23,12 +23,50 @@ mission + budget
   → SIGNAL       scores each cluster: velocity, source diversity, size, severity, novelty ............ $0
   → COORDINATOR  IGNORE / WATCH / INVESTIGATE, with the budget, reserve, cap and key in view ......... $0
   → FUNDING      allocates a maximum; every paid call must fit its worst case inside what's left
+  → MARKET       workers bid their cost at real prices; the best quality per dollar is hired ........ $0
   → WORKERS      source-tracer → evidence fetch (HTTP, $0) → cross-checker ............... paid, on its key
   → VERIFIER     one calibrated finding, then code-level acceptance checks ................. paid, on its key
   → ACCOUNTING   balance before/after from orbio_get_balance; spend ledger; alert; fresh key
 ```
 
 The dashboard shows every step live: the state machine, the score and why, each check the coordinator ran, the workers and their bids, the artifact, the spend ledger and the agent's activity log.
+
+## The worker market
+
+The source-tracer and cross-checker jobs are open to a small market of workers on different models. Before an investigation is funded, every worker bids its expected cost for this job at the gateway's real per-token prices. The coordinator hires the best **quality per dollar** (reputation ÷ bid) among workers whose reputation clears a 0.75 floor. The verifier is appointed, not auctioned: the judge shouldn't be whoever bids lowest.
+
+| Role | Workers | Price per million tokens (in / out) |
+|---|---|---|
+| Source-tracer, cross-checker | Claude Haiku 4.5 | $1.00 / $5.00 |
+| | Gemini 2.5 Flash-Lite | $0.10 / $0.40 |
+| | Mistral Small 3.2 | $0.09 / $0.25 |
+| Verifier (appointed) | Claude Sonnet 5 | $2.00 / $10.00 |
+
+**Reputation is earned, and code grades it, not a model:**
+
+- **Source-tracer:** did it name the true earliest post (40%)? Are its citations real posts (35%)? Does each sub-claim start where it first appears (25%)?
+- **Cross-checker:** are its citations fetched documents (30%)? Do its quotes appear word for word in the documents it cites (50%)? Did it assess every sub-claim (20%)?
+- **Verifier:** the share of the artifact's acceptance checks that passed.
+- **Failures:** no usable answer scores 0. An answer cut off at its token cap, or off-schema, gets one retry with a bigger cap, and the grade is docked 15%.
+- **Reputation:** the average grade, starting from 0.8 counted as two jobs.
+- **Trial jobs:** a worker with no record gets one trial job if its bid is within 5× of the best-value bid, so every affordable worker gets tested instead of the cheapest winning forever unexamined.
+
+**Measured on the demo fixture** (`npm run market:trial`, one job each, $0.0094 in total):
+
+| Worker | Grade | Cost | Time |
+|---|---|---|---|
+| tracer: Haiku / Flash-Lite / Mistral | 1.00 / 1.00 / 1.00 | $0.0029 / $0.0004 / $0.0002 | 5.8s / 3.4s / 9.1s |
+| cross-checker: Haiku / Flash-Lite / Mistral | 1.00 / **0.70** / 1.00 | $0.0052 / $0.0004 / $0.0003 | 5.7s / 3.0s / 14.4s |
+
+Flash-Lite's cross-check looked fine, but half its quotes don't appear in the documents it cites. Only the grade shows that.
+
+**In live runs:**
+
+- **First run:** Mistral won both auctions and graded 1.00, and the investigation cost **$0.0150 instead of $0.025**, with the same verdict.
+- **Second run:** Mistral's tracer answer ran past its token cap and scored 0, dropping it to 0.65, below the floor, so it was excluded from the next auction.
+- **Third run:** Flash-Lite got its trial as cross-checker, needed a retry, and graded 0.85.
+
+No worker is paid. Bids are cost estimates, and every cent is the agent's own inference spend.
 
 ## The agent owns its key
 
@@ -115,7 +153,7 @@ The watcher reads the fixture's feeds over HTTP like any other source, and the c
 |---|---|
 | The Orbio balance, key mint/rotate/revoke, every paid call and its cost | The Project X posts, feeds, status page and announcements (a disclosed fixture) |
 | Four live public RSS feeds, scanned every 15 minutes and on "Scan now" | "Real-time" monitoring: it scans on a schedule and on demand |
-| Local embeddings, clustering and scores | Worker "bids" are worst-case cost estimates at real prices, not a market |
+| Local embeddings, clustering and scores | Worker "bids" are the agent's cost estimates at real prices; no worker is paid |
 | The verifier's acceptance checks (code, not a model) | Self-refueling (not built) |
 
 ## Running it
@@ -128,6 +166,7 @@ npm run orbio:login       # one browser sign-in; saves the agent's Orbio login i
 npm start                 # http://localhost:3000
 npm run key:lifecycle     # the live key lifecycle above (spends a fraction of a cent)
 npm run fixture:check     # the free half offline: fixture wave scores + live feeds, no key, no spend
+npm run market:trial      # every worker runs the same fixture job and gets graded (about a cent)
 ```
 
 Settings are in [.env.example](.env.example): mission, budget, thresholds, models and schedule. Operator controls (Rotate, Revoke, Claim, Pause) need `ADMIN_TOKEN` when it's set. On a public deployment, anyone can press "Run demo fixture" (at most once every 150 seconds), and the budget policy still decides whether to spend. Telegram alerts turn on with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; without them the alert is shown on the dashboard.
@@ -135,7 +174,7 @@ Settings are in [.env.example](.env.example): mission, budget, thresholds, model
 ## Code
 
 - `src/watcher/`: `sources.ts` (feeds, cache, parsing), `embed.ts` (MiniLM), `cluster.ts`, `score.ts`
-- `src/agent/`: `coordinator.ts` (the state machine, key lifecycle, scans, demo), `budget-policy.ts` (the decision and its checks), `investigation.ts` (funding, metering, workers, acceptance), `workers.ts` (prompts and JSON schemas), `evidence.ts`, `alert.ts`
+- `src/agent/`: `coordinator.ts` (the state machine, key lifecycle, scans, demo), `budget-policy.ts` (the decision and its checks), `market.ts` (worker pools, auctions, grading, reputation), `investigation.ts` (funding, metering, workers, acceptance), `workers.ts` (prompts and JSON schemas), `evidence.ts`, `alert.ts`
 - `src/orbio/`: `mcp.ts` (the agent's OAuth MCP client), `keys.ts` (balance, key status, mint, revoke, free key check), `gateway.ts` (metered calls)
 - `src/demo/`: the fixture and Project X's pages
 - `src/web/`: the dashboard (`app.js` polls `/api/state`)
@@ -147,7 +186,6 @@ Deviations from the original plan, on purpose: one TypeScript process (Hono) ser
 ## Not built
 
 - **Self-refueling.** The planning spec suggests `Exchange.buyAndActivate` on Robinhood Chain as a way to turn value into new inference balance. It isn't wired: there is no treasury, no USDG, and the contract path was never verified. Orbio credits do accrue from holding $ORBIO (`accrued` in `orbio_get_balance`), but that is not the agent earning anything.
-- Worker reputation, and bidding beyond cost estimates.
 - Monitoring anything but text.
 
 ## Limits

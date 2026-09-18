@@ -161,7 +161,7 @@
         </span>
       </div>
       <ul class="keyevents">${k.events.slice(0, 5).map((e) => `<li>${time(e.at)} <b>${esc(e.event)}</b> ${e.prefix ? esc(e.prefix) + '… ' : ''}· ${esc(e.detail)}</li>`).join('')}</ul>
-      <div class="muted" style="font-size:.78rem;margin-top:8px">Workers: ${esc(S.policy.models.worker)} · verifier: ${esc(S.policy.models.verifier)} · anomaly revoke above ${usd(S.policy.anomalyCallUsd, 2)}/call</div>`
+      <div class="muted" style="font-size:.78rem;margin-top:8px">Tracers and cross-checkers are hired by auction · verifier: ${esc(S.policy.models.verifier)} · anomaly revoke above ${usd(S.policy.anomalyCallUsd, 2)}/call</div>`
 )
   }
 
@@ -239,9 +239,14 @@
     const spendPct = inv.maxBudgetUsd ? Math.min(100, (inv.spentUsd / inv.maxBudgetUsd) * 100) : 0
     const estPct = inv.maxBudgetUsd ? Math.min(100, (inv.estimateUsd / inv.maxBudgetUsd) * 100) : 0
     const delta = inv.balanceBefore !== null && inv.balanceAfter !== null ? inv.balanceBefore - inv.balanceAfter : null
+    const grade = (g) => g ? `<div class="grade ${g.quality >= 0.9 ? 'hi' : g.quality >= S.market.qualityFloor ? 'mid' : 'lo'}">graded ${g.quality.toFixed(2)} · reputation ${g.reputationBefore.toFixed(2)} → ${g.reputationAfter.toFixed(2)}<span>${esc(g.notes.join(' · '))}</span></div>` : ''
     const workers = inv.workers
-      .map((w) => `<li><span class="pip ${w.status}"></span><div><div class="who">${esc(w.id)} <span class="badge ${w.status}">${w.status}</span></div><div class="role">${esc(w.role)} · ${esc(w.model)}${w.error ? ` · <span style="color:var(--bad)">${esc(w.error)}</span>` : ''}</div></div><div class="money">bid ≤ ${usd(w.estimateUsd, 4)}<br><b>${w.costUsd ? usd(w.costUsd, 6) : '—'}</b></div></li>`)
+      .map((w) => `<li><span class="pip ${w.status}"></span><div><div class="who">${esc(w.id)} <span class="badge ${w.status}">${w.status}</span></div><div class="role">${esc(w.label || w.model)} · ${esc(w.role)}${w.latencyMs ? ` · ${(w.latencyMs / 1000).toFixed(1)}s` : ''}${w.error ? ` · <span style="color:var(--bad)">${esc(w.error)}</span>` : ''}</div>${grade(w.grade)}</div><div class="money">bid ${usd(w.estimateUsd, 4)}<br><b>${w.costUsd ? usd(w.costUsd, 6) : '—'}</b></div></li>`)
       .join('')
+    const auctions = (inv.auctions || []).filter((a) => a.role !== 'verifier')
+    const auctionHtml = auctions.length
+      ? `<div class="auctions">${auctions.map((a) => `<div class="auction"><h3>${esc(a.role)} auction</h3><table><thead><tr><th>Worker</th><th class="num">Bid</th><th class="num">Reputation</th><th class="num">Quality/$</th></tr></thead><tbody>${[...a.bids].sort((x, y) => (y.utility ?? -1) - (x.utility ?? -1)).map((b) => `<tr class="${b.bidder === a.winner ? 'won' : ''}${b.eligible ? '' : ' out'}"><td>${b.bidder === a.winner ? '✓ ' : ''}${esc(b.label)}</td><td class="num">${usd(b.bidUsd, 4)}</td><td class="num">${b.reputation.toFixed(2)} <span class="muted">(${b.jobs})</span></td><td class="num">${b.eligible ? b.utility.toLocaleString() : 'below floor'}</td></tr>`).join('')}</tbody></table><p class="muted" style="font-size:.76rem;margin:4px 0 0">${esc(a.reason)}</p></div>`).join('')}</div>`
+      : ''
     const evidence = inv.evidence.length
       ? `<ul class="ev">${inv.evidence.map((e) => `<li><span class="ref">${esc(e.ref)}</span>${esc(e.name)} <span class="badge ${e.ok ? 'ok' : 'bad'}">${e.ok ? e.kind : 'failed'}</span> ${safeUrl(e.url) ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">open</a>` : ''}</li>`).join('')}</ul>`
       : '<p class="empty">Not fetched yet.</p>'
@@ -275,6 +280,7 @@
         <span>balance <b>${usd(inv.balanceBefore, 6)}</b> → <b>${usd(inv.balanceAfter, 6)}</b>${delta !== null ? ` <span class="muted">(Δ ${usd(delta, 6)})</span>` : ''}</span>
       </div>
       <div class="bar" style="height:10px;position:relative;margin-bottom:14px" title="spent vs allocation"><i style="width:${spendPct}%"></i><span style="position:absolute;top:-3px;left:${estPct}%;width:2px;height:16px;background:var(--muted)" title="planned worst case"></span></div>
+      ${auctionHtml}
       <ul class="workers">${workers}</ul>
       ${artifact}
       ${det(`ev-${inv.id}`, `Evidence fetched for free (${inv.evidence.filter((e) => e.ok).length} documents)`, evidence)}
@@ -305,6 +311,14 @@
 )
   }
 
+  function renderMarket() {
+    const m = S.market
+    const roles = [['source-tracer', 'Source-tracers'], ['cross-checker', 'Cross-checkers'], ['verifier', 'Verifier (appointed)']]
+    set('market', `<h2>Worker market</h2>
+      <p class="muted" style="font-size:.8rem;margin:-6px 0 10px">Workers bid their expected cost at real prices; the coordinator hires the best quality per dollar among those above the ${m.qualityFloor} floor. Reputation comes from code checks on every job, starting at ${m.priorQuality}.</p>
+      ${roles.map(([role, title]) => `<h3 style="margin-top:10px">${title}</h3><ul class="bg">${m.workers.filter((w) => w.role === role).sort((a, b) => b.reputation - a.reputation).map((w) => `<li><span class="s">${w.reputation.toFixed(2)}</span><span><b>${esc(w.label)}</b> <span class="muted">${w.jobs} job${w.jobs === 1 ? '' : 's'}${w.avgCostUsd !== null ? ` · avg ${usd(w.avgCostUsd, 5)}` : ''}${w.avgLatencyMs !== null ? ` · ${(w.avgLatencyMs / 1000).toFixed(1)}s` : ''}</span><div class="bar" style="margin:4px 0"><i style="width:${w.reputation * 100}%;background:${w.reputation >= m.qualityFloor ? 'var(--ok)' : 'var(--bad)'}"></i></div>${w.recent ? `<div class="m">last: ${w.recent.quality.toFixed(2)} · ${esc(w.recent.notes.join(' · '))}</div>` : '<div class="m">no jobs yet</div>'}</span></li>`).join('')}</ul>`).join('')}`)
+  }
+
   function renderSources() {
     set('sources', `<h2>Sources</h2>
       ${S.sources.length ? `<ul class="bg">${S.sources.map((s) => `<li><span class="badge ${s.ok ? 'ok' : 'bad'}">${s.ok ? 'ok' : 'fail'}</span><span>${esc(s.name)}<div class="m">${s.items} items${s.cached ? ' · cached' : ''} · ${time(s.at)}${s.error ? ` · ${esc(s.error)}` : ''}</div></span></li>`).join('')}</ul>` : '<p class="empty">The first scan starts a few seconds after boot.</p>'}
@@ -320,6 +334,7 @@
     renderInvestigation()
     renderLog()
     renderSpend()
+    renderMarket()
     renderBackground()
     renderSources()
   }
