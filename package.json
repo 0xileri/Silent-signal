@@ -1,0 +1,33 @@
+{
+  "name": "silent-signal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An autonomous agent on its own Orbio key that watches public sources for free and pays for inference only when an emerging narrative is worth investigating.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "orbio:login": "tsx src/scripts/orbio-login.ts",
+    "key:lifecycle": "tsx src/scripts/key-lifecycle.ts",
+    "fixture:check": "tsx src/scripts/fixture-check.ts",
+    "deploy:secrets": "tsx src/scripts/deploy-secrets.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.1",
+    "@huggingface/transformers": "^4.3.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "fast-xml-parser": "^5.11.1",
+    "hono": "^4.13.8",
+    "openai": "^7.18.0",
+    "tsx": "^4.23.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "typescript": "^7.0.2"
+  }
+}

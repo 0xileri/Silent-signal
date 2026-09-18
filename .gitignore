@@ -1,0 +1,15 @@
+node_modules/
+dist/
+
+# Secrets: env files and the agent's saved Orbio login (OAuth client + tokens)
+.env
+.env.*
+!.env.example
+.orbio/
+.orbio-server/
+deploy-secrets.env
+
+# Local state: scanned items, clusters, investigations, spend ledger, model cache
+data/
+
+.claude/

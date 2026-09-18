@@ -1,1 +1,148 @@
-# Silent-signal
+# Silent Signal
+
+**An agent with a finite inference budget that decides when information is worth paying for.**
+
+Silent Signal watches public sources and detects emerging narratives using local embeddings, for free. It spends its own [Orbio](https://orbio.so) inference budget only when a signal crosses a risk threshold and the budget allows it. When it spends, a coordinator funds a bounded investigation: two workers and a verifier produce an evidence-backed artifact, and every call is recorded with its real cost and the real balance.
+
+Built for Orbio Build Week. It is an **autonomous budgeted swarm**. It is not self-refueling: nothing here turns completed work into new inference balance (see [Not built](#not-built)).
+
+> "The important part is not that AI read Reddit. It's that the agent decided when the information was worth spending money on."
+
+## The loop
+
+```
+mission + budget
+  → WATCHER      reads RSS feeds, embeds posts locally (all-MiniLM-L6-v2), clusters same-claim posts ... $0
+  → SIGNAL       scores each cluster: velocity, source diversity, size, severity, novelty ............ $0
+  → COORDINATOR  IGNORE / WATCH / INVESTIGATE, with the budget, reserve, cap and key in view ......... $0
+  → FUNDING      allocates a maximum; every paid call must fit its worst case inside what's left
+  → WORKERS      source-tracer → evidence fetch (HTTP, $0) → cross-checker ............... paid, on its key
+  → VERIFIER     one calibrated finding, then code-level acceptance checks ................. paid, on its key
+  → ACCOUNTING   balance before/after from orbio_get_balance; spend ledger; alert; fresh key
+```
+
+The dashboard shows every step live: the state machine, the score and why, each check the coordinator ran, the workers and their bids, the artifact, the spend ledger and the agent's activity log.
+
+## The agent owns its key
+
+The agent signs in to the Orbio MCP (`https://www.orbio.so/api/mcp`) as its own OAuth client and manages its key with the real MCP tools:
+
+| When | What it does | Orbio |
+|---|---|---|
+| Start | Reads the balance, mints its key, reads the key status | `orbio_get_balance`, `orbio_create_key`, `orbio_get_key_status` |
+| Every scan and every paid call | Reads the real balance | `orbio_get_balance` |
+| After every investigation | Rotates: mints a fresh key (Orbio retires the old one in the same call), then proves the old key is dead with a free `GET /api/v1/key` | `orbio_create_key` |
+| Operator presses Revoke, or one call costs over $0.05 | Revokes. The agent then refuses paid work, even across restarts, until the operator claims a key again | `orbio_revoke_key` |
+| Shutdown | Revokes, so no key is left behind | `orbio_revoke_key` |
+
+The secret only ever lives in the agent's memory. It is never written to disk, logged or sent to the browser.
+
+## The budget policy
+
+The operator gives the agent a mission budget out of the real Orbio balance (default $2.00):
+
+- **Reserve:** 20% of the budget is never spent.
+- **Cap:** at most 15% of the budget per investigation.
+- **Worst-case check:** before each call, the agent prices the prompt at ~3 characters per token plus the full `max_tokens` at the gateway's published per-token prices. The call only goes ahead if that worst case fits in what's left of the allocation.
+- **Actual cost:** the cost the gateway reports in `usage.cost`, which matched list price in every call so far. The investigation's balance before and after comes from `orbio_get_balance`.
+- **Never twice:** a claim is not paid for again if it's ≥ 80% similar to one investigated in the last 24 hours.
+- **At most one investigation at a time.**
+
+Decision thresholds on the signal score: below 0.55 IGNORE, 0.55 to 0.72 WATCH (re-checked every scan, $0), from 0.72 INVESTIGATE if every check passes. Otherwise it WATCHes and says which check failed ("reserve protected", "the agent holds no key", "already investigated").
+
+```
+score = 0.30 velocity + 0.25 source diversity + 0.20 cluster size + 0.15 severity + 0.10 novelty
+velocity  = mentions in the last 15 min / 8        diversity = (independent sources − 1) / 3
+size      = (mentions − 1) / 8                      severity  = keyword tiers (exploit/drained > halted/frozen > stuck/pending)
+novelty   = 1 − similarity to anything investigated in the last 24 h           (each clamped to 0..1)
+```
+
+A cluster must also mention the mission's entity. Everything else is scored but ignored as "off mission".
+
+## Measured (live, 2026-09-18)
+
+**Key lifecycle** (`npm run key:lifecycle`):
+
+```
+orbio_get_balance          $49.991044 spendable
+orbio_create_key           sk-orbio-7_sXK0… (replaced an existing key: false)
+orbio_get_key_status       hasKey true
+GET /key (free)            HTTP 200
+paid call (claude-haiku-4.5) "Ready" · 14+4 tokens · $0.000034 at list price · gateway reports $0.000034
+orbio_get_balance          $49.991010 (Δ $0.000034)
+orbio_create_key (rotate)  sk-orbio-7_sXK0… → sk-orbio-zrRJks… (replaced: true)
+old key, GET /key          HTTP 401 (dead)
+old key, paid call         rejected (401)
+orbio_get_balance          $49.991010 (rotation moved $0.000000)
+orbio_revoke_key           revoked: true
+orbio_get_key_status       hasKey false
+```
+
+**The demo fixture, three runs:**
+
+| | Wave 1 (1 post) | Wave 2 (4 posts, 3 sources) | Wave 3 (9 posts, 4 sources) | Investigation | Verdict |
+|---|---|---|---|---|---|
+| Run 1 | 0.21 IGNORE | 0.57 WATCH | 0.97 INVESTIGATE | $0.0259 | partially supported, 55% |
+| Run 2, key revoked first | 0.21 IGNORE | 0.57 WATCH | 0.97 → **WATCH: "the agent holds no key"**, $0 | after the key was re-claimed, the next scan funded it: $0.0235 | supported, 85%* |
+| Run 3 | 0.21 IGNORE | 0.57 WATCH | 0.97 INVESTIGATE | $0.0249 | partially supported, 85% |
+
+In every run, the balance change across the investigation equalled the metered cost to the micro-dollar. A typical investigation: source-tracer (Claude Haiku 4.5) ~$0.0033, cross-checker (Haiku 4.5) ~$0.006, verifier (Claude Sonnet 5) ~$0.016. The planned worst case was ~$0.035 against a $0.30 allocation. After every investigation the agent rotated its key; the old key answered HTTP 401 and the balance didn't move.
+
+\*Run 2 graded only the mild part of the narrative ("withdrawals are delayed"). The verifier is now told to judge the narrative as it spreads, severe sub-claims included. Run 3 is after that change.
+
+**Real feeds**, same session: 115–124 live items from Cointelegraph, Decrypt, Reddit r/CryptoCurrency and Hacker News formed 87 clusters locally. The strongest scored 0.45 and none mentioned the mission, so the agent spent $0 on them.
+
+## The demo fixture (planted, not organic)
+
+The demo needs a signal that shows up on cue, so the app serves a planted narrative about a fictional **"Project X"**:
+
+- nine posts across four fake feeds (a forum, a social feed, a news blog, a chat group), released in three waves about 12 seconds apart. Wave 1 is one "is my withdrawal stuck?" post; wave 3 adds "possible exploit??" and "got drained" posts;
+- Project X's own status page and announcements, which say the delays are scheduled hot-wallet maintenance and that there is no security incident.
+
+The watcher reads the fixture's feeds over HTTP like any other source, and the cross-checker fetches the status page like any other evidence. Timestamps are real: a post's time is the moment its wave was released. Fixture posts only cluster with each other, so real posts can't change the demo. Every fixture page says it is planted test data, and the dashboard labels fixture signals **demo fixture**. See `/demo` on a running instance.
+
+## What's real, what's not
+
+| Real | Not real |
+|---|---|
+| The Orbio balance, key mint/rotate/revoke, every paid call and its cost | The Project X posts, feeds, status page and announcements (a disclosed fixture) |
+| Four live public RSS feeds, scanned every 15 minutes and on "Scan now" | "Real-time" monitoring: it scans on a schedule and on demand |
+| Local embeddings, clustering and scores | Worker "bids" are worst-case cost estimates at real prices, not a market |
+| The verifier's acceptance checks (code, not a model) | Self-refueling (not built) |
+
+## Running it
+
+Node 22 or newer.
+
+```bash
+npm install
+npm run orbio:login       # one browser sign-in; saves the agent's Orbio login in .orbio/ (gitignored)
+npm start                 # http://localhost:3000
+npm run key:lifecycle     # the live key lifecycle above (spends a fraction of a cent)
+npm run fixture:check     # the free half offline: fixture wave scores + live feeds, no key, no spend
+```
+
+Settings are in [.env.example](.env.example): mission, budget, thresholds, models and schedule. Operator controls (Rotate, Revoke, Claim, Pause) need `ADMIN_TOKEN` when it's set. On a public deployment, anyone can press "Run demo fixture" (at most once every 150 seconds), and the budget policy still decides whether to spend. Telegram alerts turn on with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; without them the alert is shown on the dashboard.
+
+## Code
+
+- `src/watcher/`: `sources.ts` (feeds, cache, parsing), `embed.ts` (MiniLM), `cluster.ts`, `score.ts`
+- `src/agent/`: `coordinator.ts` (the state machine, key lifecycle, scans, demo), `budget-policy.ts` (the decision and its checks), `investigation.ts` (funding, metering, workers, acceptance), `workers.ts` (prompts and JSON schemas), `evidence.ts`, `alert.ts`
+- `src/orbio/`: `mcp.ts` (the agent's OAuth MCP client), `keys.ts` (balance, key status, mint, revoke, free key check), `gateway.ts` (metered calls)
+- `src/demo/`: the fixture and Project X's pages
+- `src/web/`: the dashboard (`app.js` polls `/api/state`)
+- API: `GET /api/state`, `/api/signals`, `/api/investigations/:id`, `/api/spend`; `POST /api/scan`, `/api/demo/run`, `/api/key/{rotate,revoke,claim}`, `/api/agent/{pause,resume}`
+
+Deviations from the original plan, on purpose: one TypeScript process (Hono) serves the dashboard and runs the agent, with no React/Vite build. State is a JSON file instead of SQLite. The clustering threshold is 0.6, not 0.82: the fixture's paraphrases measure 0.49–0.87 apart, and the "exploit" posts split off at 0.82.
+
+## Not built
+
+- **Self-refueling.** The planning spec suggests `Exchange.buyAndActivate` on Robinhood Chain as a way to turn value into new inference balance. It isn't wired: there is no treasury, no USDG, and the contract path was never verified. Orbio credits do accrue from holding $ORBIO (`accrued` in `orbio_get_balance`), but that is not the agent earning anything.
+- Worker reputation, and bidding beyond cost estimates.
+- Monitoring anything but text.
+
+## Limits
+
+- It finds narratives in the feeds it reads. Four RSS feeds are a small window.
+- Severity is keyword-based: a post that says "exploit" raises the score whether or not it's serious. That's why an investigation follows.
+- The verifier weighs a project's own status page as what the project says, not as proof. The artifact reports status and confidence, not truth.
