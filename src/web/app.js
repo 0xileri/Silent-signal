@@ -356,8 +356,48 @@
 )
   }
 
+  // ── headline numbers: count up to each new value ─────────────────────────────────────────────
+  function countTo(el, value, format) {
+    if (!el || value === null || value === undefined || Number.isNaN(value)) return
+    const from = typeof el._v === 'number' ? el._v : 0
+    el._v = value
+    if (from === value) {
+      el.textContent = format(value)
+      return
+    }
+    const start = performance.now()
+    const dur = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 900
+    const step = (now) => {
+      const t = dur ? Math.min(1, (now - start) / dur) : 1
+      const eased = 1 - Math.pow(1 - t, 3)
+      el.textContent = format(from + (value - from) * eased)
+      if (t < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }
+
+  function renderKpis() {
+    const b = S.budget
+    const latest = S.balance.latest
+    const refuels = (S.fuel && S.fuel.refuels) || []
+    const confirmed = refuels.filter((r) => r.status === 'confirmed')
+    countTo($('kpi-balance'), latest ? latest.balanceUsd : null, (v) => `$${v.toFixed(2)}`)
+    if (latest) $('kpi-balance-hint').textContent = `orbio_get_balance · ${time(latest.at)}`
+    countTo($('kpi-spent'), b.spentUsd, (v) => `$${v.toFixed(4)}`)
+    $('kpi-spent-hint').textContent = `of a ${usd(b.budgetUsd, 2)} mission budget`
+    countTo($('kpi-investigations'), S.stats.investigations, (v) => String(Math.round(v)))
+    countTo($('kpi-refueled'), b.refueledUsd || 0, (v) => `+$${v.toFixed(2)}`)
+    $('kpi-refueled-hint').textContent = S.fuel && S.fuel.configured
+      ? `${confirmed.length} refuel${confirmed.length === 1 ? '' : 's'} · treasury ${S.fuel.treasury ? S.fuel.treasury.usdg.toFixed(2) : '?'} USDG`
+      : 'no treasury configured'
+    if (b.runway !== null) countTo($('kpi-runway'), b.runway, (v) => String(Math.round(v)))
+    const chip = $('chip-fuel')
+    if (chip && confirmed[0]) chip.textContent = `+$${Number(confirmed[0].activatedUsd).toFixed(2)} refueled`
+  }
+
   function render() {
     if (!S) return
+    renderKpis()
     renderPhase()
     renderWallet()
     renderSignal()
@@ -378,6 +418,29 @@
       $('phase').textContent = 'OFFLINE'
     }
   }
+
+  // ── motion: reveal sections as they scroll in, and a spotlight that follows the cursor ─────────
+  const reveal = () => document.querySelectorAll('.reveal:not(.in)').forEach((el) => el.classList.add('in'))
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          e.target.classList.add('in')
+          io.unobserve(e.target)
+        }
+      }
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 })
+    document.querySelectorAll('.reveal').forEach((el) => io.observe(el))
+  } else {
+    reveal()
+  }
+  document.addEventListener('pointermove', (e) => {
+    const card = e.target.closest && e.target.closest('.card')
+    if (!card) return
+    const r = card.getBoundingClientRect()
+    card.style.setProperty('--mx', `${e.clientX - r.left}px`)
+    card.style.setProperty('--my', `${e.clientY - r.top}px`)
+  }, { passive: true })
 
   refresh()
   setInterval(refresh, 1500)
