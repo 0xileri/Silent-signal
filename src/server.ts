@@ -35,6 +35,7 @@ app.get('/favicon.ico', (c) => c.redirect('/brand/icon-32.png', 301))
 app.get('/app.js', (c) => c.body(APP_JS, 200, { 'content-type': 'text/javascript; charset=utf-8' }))
 app.get('/app.css', (c) => c.body(APP_CSS, 200, { 'content-type': 'text/css; charset=utf-8' }))
 app.get('/api/state', (c) => c.json(snapshot()))
+app.get('/api/status', (c) => c.json(snapshot()))
 app.get('/api/signals', (c) => c.json(snapshot().signals))
 app.get('/api/signals/:id', (c) => {
   const signal = snapshot().signals.find((s) => s.id === c.req.param('id'))
@@ -64,6 +65,15 @@ app.post('/api/demo/run', (c) => {
   if (isBusy().demo) return c.json({ error: 'The demo is already running.' }, 409)
   const wait = demoCooldownLeft()
   if (!isAdmin(c) && wait > 0) return c.json({ error: `The demo ran recently. Try again in ${wait}s.` }, 429)
+  if (!isAdmin(c)) {
+    const since = Date.now() - 24 * 3_600_000
+    state.agent.publicDemos = (state.agent.publicDemos ?? []).filter((at) => Date.parse(at) > since)
+    if (state.agent.publicDemos.length >= SCHEDULE.publicDemosPerDay) {
+      return c.json({ error: `The public demo has run ${SCHEDULE.publicDemosPerDay} times today, its daily limit. Try again tomorrow.` }, 429)
+    }
+    state.agent.publicDemos.push(new Date().toISOString())
+    saveNow()
+  }
   runDemo().catch((err) => log('ERROR', `demo failed: ${failure(err)}`))
   return c.json({ started: true }, 202)
 })

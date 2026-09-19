@@ -28,6 +28,10 @@ export interface AgentMemory {
   reputation: Record<string, WorkerRecord>
   /** Self-refuels from the treasury, newest last. */
   refuels: Refuel[]
+  /** When the public (non-operator) demo ran, for its daily cap. */
+  publicDemos: string[]
+  /** Cost of spend events trimmed from the ledger file, so the budget never forgets old spend. */
+  archivedSpentUsd: number
 }
 
 interface State {
@@ -57,6 +61,8 @@ const empty = (): State => ({
     keyEvents: [],
     reputation: {},
     refuels: [],
+    publicDemos: [],
+    archivedSpentUsd: 0,
   },
 })
 
@@ -77,13 +83,19 @@ export function save(): void {
   timer = setTimeout(saveNow, 300)
 }
 
+const KEEP_SPEND = 500
+
 export function saveNow(): void {
   clearTimeout(timer)
+  if (state.spend.length > KEEP_SPEND) {
+    const trimmed = state.spend.splice(0, state.spend.length - KEEP_SPEND)
+    state.agent.archivedSpentUsd = Math.round(((state.agent.archivedSpentUsd ?? 0) + trimmed.reduce((sum, s) => sum + s.costUsd, 0)) * 1e6) / 1e6
+  }
   writeJson(FILE, {
     items: [...state.items.values()],
     clusters: state.clusters,
     investigations: state.investigations.slice(-50),
-    spend: state.spend.slice(-500),
+    spend: state.spend,
     agent: { ...state.agent, balances: state.agent.balances.slice(-500), keyEvents: state.agent.keyEvents.slice(-100) },
   } satisfies State)
 }
@@ -93,5 +105,6 @@ export const refueledUsd = () =>
   Math.round((state.agent.refuels ?? []).filter((r) => r.status === 'confirmed').reduce((sum, r) => sum + (r.activatedUsd ?? 0), 0) * 1e6) / 1e6
 export const missionBudgetUsd = () => Math.round((POLICY.budgetUsd + refueledUsd()) * 1e6) / 1e6
 
-export const missionSpentUsd = () => Math.round(state.spend.reduce((sum, s) => sum + s.costUsd, 0) * 1e6) / 1e6
+export const missionSpentUsd = () =>
+  Math.round(((state.agent.archivedSpentUsd ?? 0) + state.spend.reduce((sum, s) => sum + s.costUsd, 0)) * 1e6) / 1e6
 export const lastBalance = () => state.agent.balances.at(-1) ?? null

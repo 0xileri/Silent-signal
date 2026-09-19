@@ -145,6 +145,11 @@ export async function startAgent(): Promise<void> {
     const status = await getKeyStatus()
     log('KEY', `orbio_get_key_status → ${status.hasKey ? `${status.prefix}… active, created ${status.createdAt}` : 'no key'}`)
     if (treasuryAccount()) {
+      for (const r of state.agent.refuels.filter((r) => r.status === 'buying' || r.status === 'confirming')) {
+        r.status = 'unconfirmed'
+        r.error ??= 'interrupted by a restart; counted toward the daily cap, and toward the budget only if Orbio shows it'
+        log('FUEL', `refuel ${r.id} was interrupted by a restart; it will count only once orbio_get_balance shows it`)
+      }
       runtime.treasury = await readTreasury().catch(() => null)
       const t = runtime.treasury
       log('FUEL', t ? `treasury ${t.address} on Robinhood Chain: ${t.usdg} USDG, ${t.eth} ETH` : 'treasury configured but unreadable')
@@ -572,7 +577,7 @@ export function snapshot() {
     },
     signals: onMission.slice(0, 8).map(view),
     background,
-    investigations: lastInvestigations.reverse(),
+    investigations: lastInvestigations.reverse().map((i) => ({ ...i, workers: i.workers.map(({ output: _output, ...w }) => w) })),
     spend: state.spend.slice(-40).reverse(),
     log: recentLog(160).reverse(),
   }

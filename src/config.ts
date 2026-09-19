@@ -75,8 +75,9 @@ export const SCHEDULE = {
   scanEveryMin: num('SCAN_INTERVAL_MIN', 15),
   feedCacheMin: num('FEED_CACHE_MIN', 10),
   demoWaveDelaySec: num('DEMO_WAVE_DELAY_SEC', 12),
-  /** Public "Run demo" presses: at most one per this many seconds. */
+  /** Public "Run demo" presses: at most one per this many seconds, and this many a day. */
   demoCooldownSec: num('DEMO_COOLDOWN_SEC', 150),
+  publicDemosPerDay: num('PUBLIC_DEMOS_PER_DAY', 12),
 }
 
 /**

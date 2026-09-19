@@ -15,6 +15,14 @@ Built for Orbio Build Week. It is an **autonomous budgeted swarm** that refuels 
 
 > "The important part is not that AI read Reddit. It's that the agent decided when the information was worth spending money on."
 
+**Ground rules:**
+
+- **Keys and inference:** the Orbio MCP is the only key-management path. Paid inference goes only through the Orbio gateway, on the agent's own key, against the real balance.
+- **The free part:** embeddings, clustering and scoring run locally, for free.
+- **Fuel:** refueling happens on Robinhood Chain (chain 4663) through Orbio's published `buyAndActivate`, from a treasury the operator funds.
+- **The demo:** the narrative is a disclosed planted fixture, and "Scan now" always works without waiting for the schedule.
+- **Truth:** no claim is treated as true because many posts repeat it. Every finding carries a status, a confidence and its unknowns.
+
 ## The loop
 
 ```
@@ -80,7 +88,7 @@ The agent has its own wallet on Robinhood Chain (chain 4663): the treasury. The 
 
 **Limits:**
 - 2 USDG per refuel, at most 6 USDG a day
-- no retry within an hour of a failure
+- a network failure is retried after 5 minutes; a refusal (price or funds) waits an hour
 - nothing while the operator has the agent paused
 
 The dashboard shows the treasury, the policy and every refuel with its transaction. Operators can also press **Refuel now**.
@@ -135,6 +143,7 @@ The operator gives the agent a mission budget out of the real Orbio balance (def
 - **Actual cost:** the cost the gateway reports in `usage.cost`, which matched list price in every call so far. The investigation's balance before and after comes from `orbio_get_balance`.
 - **Never twice:** a claim is not paid for again if it's ≥ 80% similar to one investigated in the last 24 hours.
 - **At most one investigation at a time.**
+- **Refuels add to the budget,** once confirmed in `orbio_get_balance`: the agent may spend what it bought (see [Self-refuel](#self-refuel-from-a-treasury)).
 
 Decision thresholds on the signal score: below 0.55 IGNORE, 0.55 to 0.72 WATCH (re-checked every scan, $0), from 0.72 INVESTIGATE if every check passes. Otherwise it WATCHes and says which check failed ("reserve protected", "the agent holds no key", "already investigated").
 
@@ -213,7 +222,7 @@ npm run fixture:check     # the free half offline: fixture wave scores + live fe
 npm run market:trial      # every worker runs the same fixture job and gets graded (about a cent)
 ```
 
-Settings are in [.env.example](.env.example): mission, budget, thresholds, models and schedule. Operator controls (Rotate, Revoke, Claim, Pause) need `ADMIN_TOKEN` when it's set. On a public deployment, anyone can press "Run demo fixture" (at most once every 150 seconds), and the budget policy still decides whether to spend. Telegram alerts turn on with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; without them the alert is shown on the dashboard.
+Settings are in [.env.example](.env.example): mission, budget, thresholds, models, schedule and refuel. `key:lifecycle` and `market:trial` take over the account's one key while they run; a running agent notices on its next scan and claims its own again. Operator controls (Rotate, Revoke, Claim, Pause) need `ADMIN_TOKEN` when it's set. On a public deployment, anyone can press "Run demo fixture": at most once every 150 seconds and 12 times a day, so nobody can drain the budget. The budget policy still decides whether to spend. The cross-checker only follows links in posts to public hosts, and every redirect is checked, so a post can't point it at internal addresses. Telegram alerts turn on with `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; without them the alert is shown on the dashboard.
 
 ## Code
 
