@@ -43,6 +43,11 @@ const runtime = {
 }
 
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 4 : 2)}`
+/** Public output gets the first line only: some library errors carry whole request dumps. */
+const oneLine = (s: string) => {
+  const first = s.split('\n')[0]!.trim()
+  return first.length > 400 ? `${first.slice(0, 399)}…` : first
+}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function setPhase(phase: Phase): void {
@@ -552,7 +557,10 @@ export function snapshot() {
       treasury: runtime.treasury,
       treasuryUrl: treasuryAccount() ? addressUrl(treasuryAccount()!.address) : null,
       refueling: runtime.refueling,
-      refuels: state.agent.refuels.slice(-8).reverse().map((r) => ({ ...r, buyTxUrl: r.buyTx ? txUrl(r.buyTx) : null })),
+      refuels: state.agent.refuels
+        .slice(-8)
+        .reverse()
+        .map((r) => ({ ...r, error: r.error ? oneLine(r.error) : null, buyTxUrl: r.buyTx ? txUrl(r.buyTx) : null })),
     },
     budget: {
       budgetUsd: missionBudgetUsd(),
@@ -579,6 +587,8 @@ export function snapshot() {
     background,
     investigations: lastInvestigations.reverse().map((i) => ({ ...i, workers: i.workers.map(({ output: _output, ...w }) => w) })),
     spend: state.spend.slice(-40).reverse(),
-    log: recentLog(160).reverse(),
+    log: recentLog(160)
+      .reverse()
+      .map((l) => ({ ...l, msg: oneLine(l.msg) })),
   }
 }
